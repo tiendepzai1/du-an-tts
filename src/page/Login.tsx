@@ -2,7 +2,7 @@ import {useForm } from 'react-hook-form'
 import { type IAuth ,authSchema   } from './schema/auth'
 import { zodResolver } from '@hookform/resolvers/zod'
 import axios from 'axios'
-import { message } from 'antd'
+
 import { useNavigate } from 'react-router-dom'
 
 
@@ -16,14 +16,14 @@ export const Login = () => {
     try {
       const res = await axios.post("http://localhost:3000/user/login", data);
       console.log(res);
-      message.success("Đăng nhập thành công");
+     console.log("Đăng nhập thành công");
       localStorage.setItem("token", res.data.token);
        localStorage.setItem("user", JSON.stringify({ username: res.data.username }));
       nav("/");
       alert("đăng nhập tk")
     } catch (error) {
       console.log(error);
-      message.error("Đăng nhập thất bại");
+     console.log("Đăng nhập thất bại");
     }
   };
 
