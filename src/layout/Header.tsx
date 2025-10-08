@@ -7,15 +7,18 @@ export const Header = () => {
 
   // Kiểm tra localStorage khi mount
   useEffect(() => {
-    const savedUser = localStorage.getItem("user");
+    const savedUser = localStorage.getItem("username");
     if (savedUser) {
       setUser(JSON.parse(savedUser));
     }
   }, []);
 
   const handleLogout = () => {
-    localStorage.removeItem("user");
+    localStorage.removeItem("username");
+    localStorage.removeItem("token")
+    
     setUser(null);
+    
   
     alert("đăng xuất tk")
   };
