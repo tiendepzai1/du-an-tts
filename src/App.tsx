@@ -7,9 +7,9 @@ import PrivateRoute from './privateRoute'
 import CardAdd from './page/card/cartAdd'
 import CardList from './page/card/cartList'
 import CardUpdate from './page/card/cartUpdate'
-import ListAdd from './page/list/listAdd'
+
 import Header from './components/header'
-import Sidebar from './components/sidebar'
+
 import Column from 'antd/es/table/Column'
 import MainLayout from './layout/MainLayout'
 import BoardPage from './page/board/BoardPage'
@@ -31,9 +31,9 @@ function App() {
         <Route path='/cardAdd' element={<CardAdd />} />
         <Route path='/cardList' element={<CardList />} />
         <Route path='/cardUpdate' element={<CardUpdate initialData={{ cardName: '', description: '', dueDate: '', position: 0, status: '' }} onUpdate={(data) => console.log(data)} />} />
-        <Route path='/listAdd' element={<ListAdd />} />
+
         <Route path='/header' element={<Header />} />
-        <Route path='/sidebar' element={<Sidebar />} />
+
         <Route path='/Column' element={<Column />} />
         <Route path='/MainLayout' element={<MainLayout />} />
         <Route path='/BroadPage' element={<BoardPage />} />

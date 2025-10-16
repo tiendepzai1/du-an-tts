@@ -96,12 +96,7 @@ export default function BoardPage() {
             </>
           ) : (
             <>
-              <button
-                className="bg-blue-600 hover:bg-blue-700 px-4 py-1.5 rounded-md text-sm font-medium"
-                onClick={() => nav("/broadAdd")}
-              >
-                Tạo bảng
-              </button>
+           
 
               <div className="flex -space-x-2">
                 <img

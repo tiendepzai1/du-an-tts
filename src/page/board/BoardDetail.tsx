@@ -1,4 +1,4 @@
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { useForm } from "react-hook-form";
@@ -37,6 +37,8 @@ export default function BoardDetail() {
     reset,
     formState: { errors },
   } = useForm<ListFormInputs>();
+
+  const nav =useNavigate()
 
   // 🔹 Lấy chi tiết Board và list
   const fetchBoard = async () => {
@@ -121,9 +123,20 @@ export default function BoardDetail() {
 
   if (loading) return <p className="p-6">Đang tải dữ liệu...</p>;
   if (!board) return <p className="p-6 text-red-500">Không tìm thấy board!</p>;
+  const SubmitEvent = ()=>{
+    nav("/Layout")
+  }
 
   return (
+
+
     <div className="p-6">
+      <button
+          onClick={() => SubmitEvent()}
+          className="bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium py-2 px-4 rounded-xl mb-4"
+        >
+          Trang Chủ
+        </button>
       {/* Board Info */}
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-black-700">{board.broadName}</h1>
@@ -224,12 +237,21 @@ export default function BoardDetail() {
                   >
                     <Trash2 size={16} />
                   </button>
+          
                 </div>
+               
               </div>
               <p className="text-sm text-gray-700 mb-2">{list.description}</p>
               <span className="inline-block px-2 py-1 text-xs rounded-lg bg-white/60 font-medium text-gray-700">
                 {list.status}
               </span>
+
+               <div>
+                  <div>
+                    
+                    <h1>aaa</h1>
+                  </div>
+                </div>
             </div>
           ))
         ) : (

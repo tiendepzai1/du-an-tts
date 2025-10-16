@@ -1,5 +1,5 @@
 import Header from "../components/header";
-import Sidebar from "../components/sidebar";
+// import Sidebar from "../components/sidebar";
 
 import React from "react";
 
@@ -15,7 +15,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
-        <Sidebar />
+        {/* <Sidebar /> */}
 
         {/* Nội dung trang */}
         <main className="flex-1 p-6 overflow-auto">{children}</main>
