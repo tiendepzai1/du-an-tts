@@ -19,7 +19,7 @@ export const Register = () => {
         handleSubmit,
         register,
         formState: { errors },
-        reset
+        reset, setError
 
 
     } = useForm<IAuth>({ resolver: zodResolver(authSchema) })
@@ -29,18 +29,28 @@ export const Register = () => {
     const onSubmit = async (data: IAuth) => {
         try {
             const res = await axios.post("http://localhost:3000/user/register", data);
-            console.log(res)
-            message.success("Đăng ký thành công")
-            alert("đăng ký thành công")
-            reset()
-            
-            nav("/login")
-        } catch (error) {
-            console.log(error)
-            message.error("Đăng ký thất bại")
 
+            message.success("Đăng ký thành công");
+            console.log(res)
+            alert("Đăng ký thành công");
+            reset();
+            nav("/login");
+        } catch (error: any) {
+            // Kiểm tra phản hồi từ backend
+            if (axios.isAxiosError(error) && error.response) {
+                const backendError = error.response.data;
+                if (backendError.field && backendError.message) {
+                    // Gán lỗi cụ thể vào form (ví dụ username hoặc email)
+                    setError(backendError.field, { message: backendError.message });
+                } else {
+                    message.error(backendError.message || "Đăng ký thất bại");
+                }
+            } else {
+                message.error("Lỗi kết nối đến server");
+            }
         }
-    }
+    };
+
 
     return (
         <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 to-blue-100">

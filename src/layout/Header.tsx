@@ -30,16 +30,7 @@ export const Header = () => {
 <header className="fixed top-0 left-0 w-full bg-white shadow-md z-50">
 
       <div className="container mx-auto flex items-center justify-center p-4">
-        <div className="text-2xl font-bold text-blue-600 cursor-pointer" onClick={() => nav("/")}>
-          MyLogo
-        </div>
-
-        <nav className="hidden md:flex space-x-6">
-          <a href="/" className="text-gray-700 hover:text-blue-600 transition-colors">Trang chủ</a>
-          <a href="/products" className="text-gray-700 hover:text-blue-600 transition-colors">Sản phẩm</a>
-          <a href="/about" className="text-gray-700 hover:text-blue-600 transition-colors">Giới thiệu</a>
-          <a href="/contact" className="text-gray-700 hover:text-blue-600 transition-colors">Liên hệ</a>
-        </nav>
+       
 
         <div className="flex items-center space-x-4">
           {!user ? (

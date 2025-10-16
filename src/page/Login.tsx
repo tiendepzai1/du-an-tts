@@ -22,7 +22,7 @@ export const Login = () => {
       console.log("Đăng nhập thành công");
       localStorage.setItem("token", res.data.token);
       localStorage.setItem("username", JSON.stringify({ username: res.data.data.username }));
-      nav("/");
+      nav("/Layout");
       alert("đăng nhập tk")
     } catch (error) {
       console.log(error);

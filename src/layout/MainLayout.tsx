@@ -1,6 +1,6 @@
 import Header from "../components/header";
 import Sidebar from "../components/sidebar";
-import BoardPage from "../page/board/BoardPage";
+
 import React from "react";
 
 interface MainLayoutProps {
