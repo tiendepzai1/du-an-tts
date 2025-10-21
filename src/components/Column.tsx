@@ -17,11 +17,10 @@ interface ColumnProps {
 const Column: React.FC<ColumnProps> = ({ title }) => {
   const [cardList, setCardList] = useState<Card[]>([]);
   const [isAdding, setIsAdding] = useState(false);
-  const [newCardTitle, setNewCardTitle] = useState("");
-  const [newDescription, setNewDescription] = useState("");
-  const [newDueDate, setNewDueDate] = useState("");
+  const [newCard, setNewCard] = useState({ cardName: "", description: "", dueDate: "" });
   const [loading, setLoading] = useState(true);
 
+  // 🔹 Fetch cards from server
   const fetchCards = async () => {
     setLoading(true);
     try {
@@ -47,25 +46,25 @@ const Column: React.FC<ColumnProps> = ({ title }) => {
     fetchCards();
   }, [title]);
 
+  // 🔹 Handle adding a new card
   const handleAddCard = async () => {
-    if (!newCardTitle.trim()) return alert("Nhập tiêu đề card!");
+    if (!newCard.cardName.trim()) {
+      alert("Nhập tiêu đề card!");
+      return;
+    }
     try {
       const res = await axios.post("http://localhost:3000/card/create", {
-        cardName: newCardTitle.trim(),
-        description: newDescription.trim(),
-        dueDate: newDueDate || null,
+        ...newCard,
         columnTitle: title,
+        dueDate: newCard.dueDate || null,
       });
-
       if (res.data?.data) {
         const addedCard: Card = {
           ...res.data.data,
           dueDate: res.data.data.dueDate ? res.data.data.dueDate.slice(0, 10) : null,
         };
         setCardList((prev) => [...prev, addedCard]);
-        setNewCardTitle("");
-        setNewDescription("");
-        setNewDueDate("");
+        setNewCard({ cardName: "", description: "", dueDate: "" });
         setIsAdding(false);
       }
     } catch (err) {
@@ -74,17 +73,19 @@ const Column: React.FC<ColumnProps> = ({ title }) => {
     }
   };
 
+  // 🔹 Handle editing a card
   const handleEditCard = async (id: string, updatedData: Partial<Card>) => {
     try {
-      const res = await axios.put(`http://localhost:3000/card/update/${id}`, updatedData);
+      const res = await axios.put(`http://localhost:3000/card/update/${id}`, {
+        ...updatedData,
+        columnTitle: title,
+      });
       if (res.data?.data) {
         const updatedCard: Card = {
           ...res.data.data,
           dueDate: res.data.data.dueDate ? res.data.data.dueDate.slice(0, 10) : null,
         };
-        setCardList((prev) =>
-          prev.map((c) => (c._id === id ? updatedCard : c))
-        );
+        setCardList((prev) => prev.map((c) => (c._id === id ? updatedCard : c)));
       }
     } catch (err) {
       console.error("Lỗi server khi cập nhật card:", err);
@@ -92,10 +93,11 @@ const Column: React.FC<ColumnProps> = ({ title }) => {
     }
   };
 
+  // 🔹 Handle deleting a card
   const handleDeleteCard = async (id: string) => {
     if (!window.confirm("Bạn có chắc muốn xóa card này không?")) return;
     try {
-await axios.delete(`http://localhost:3000/card/delete/${id}`);
+      await axios.delete(`http://localhost:3000/card/delete/${id}`);
       setCardList((prev) => prev.filter((c) => c._id !== id));
     } catch (err) {
       console.error("Lỗi server khi xóa card:", err);
@@ -132,21 +134,21 @@ await axios.delete(`http://localhost:3000/card/delete/${id}`);
           <input
             type="text"
             placeholder="Tiêu đề card..."
-            value={newCardTitle}
-            onChange={(e) => setNewCardTitle(e.target.value)}
+            value={newCard.cardName}
+            onChange={(e) => setNewCard((prev) => ({ ...prev, cardName: e.target.value }))}
             className="w-full p-2 rounded-md bg-[#2c2f48] text-white border border-gray-500 outline-none"
           />
           <textarea
             placeholder="Mô tả..."
-            value={newDescription}
-            onChange={(e) => setNewDescription(e.target.value)}
+            value={newCard.description}
+            onChange={(e) => setNewCard((prev) => ({ ...prev, description: e.target.value }))}
             className="w-full p-2 rounded-md bg-[#2c2f48] text-white border border-gray-500 outline-none"
             rows={2}
           />
           <input
             type="date"
-            value={newDueDate}
-            onChange={(e) => setNewDueDate(e.target.value)}
+            value={newCard.dueDate}
+            onChange={(e) => setNewCard((prev) => ({ ...prev, dueDate: e.target.value }))}
             className="w-full p-2 rounded-md bg-[#2c2f48] text-white border border-gray-500 outline-none"
           />
           <div className="flex gap-2 mt-2">
