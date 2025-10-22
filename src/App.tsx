@@ -42,14 +42,6 @@ function App() {
         <Route path='/detail/:id' element={< BoardDetail />} />
 
 
-
-
-
-
-
-
-
-
       </Routes>
     </BrowserRouter>
   )

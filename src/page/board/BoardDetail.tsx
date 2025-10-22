@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import axios from "axios";
 import { useForm } from "react-hook-form";
 import { Pencil, Trash2 } from "lucide-react";
+import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 
 type Card = {
   _id: string;
@@ -46,11 +47,9 @@ export default function BoardDetail() {
   const [loading, setLoading] = useState(true);
   const [editingList, setEditingList] = useState<List | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [addingCardListsId, setAddingCardListId] = useState<string | null>(null);
-  const [editingCard, setEditingCard] = useState<Card | null>(null); // ✅ card đang sửa
-  const [editingCardListId, setEditingCardListId] = useState<string | null>(null); // ✅ list chứa card đó
-
-
+  const [addingCardListId, setAddingCardListId] = useState<string | null>(null);
+  const [editingCard, setEditingCard] = useState<Card | null>(null);
+  const [editingCardListId, setEditingCardListId] = useState<string | null>(null);
 
   const nav = useNavigate();
 
@@ -68,16 +67,13 @@ export default function BoardDetail() {
     formState: { errors: cardErrors },
   } = useForm<CardFormInputs>();
 
-  // 🔹 Lấy dữ liệu board
+  // Lấy dữ liệu board
   const fetchBoard = async () => {
     if (!id) return;
     try {
       setLoading(true);
       const boardRes = await axios.get(`http://localhost:3000/broad/detail/${id}`);
       const listRes = await axios.get(`http://localhost:3000/list/broad/${id}`);
-      // console.log("Dữ liệu từ listRes:", listRes.data);
-      // console.log("📦 List chi tiết:", JSON.stringify(listRes.data.data, null, 2));
-
       setBoard({
         _id: id,
         broadName: boardRes.data.data?.broadName || "Tên Board",
@@ -95,7 +91,98 @@ export default function BoardDetail() {
     fetchBoard();
   }, [id]);
 
-  // 🔹 Thêm/Sửa List
+  // Xử lý kéo thả
+const handleDragEnd = async (result: any) => {
+  const { destination, source, draggableId } = result;
+
+  if (!destination || !board) {
+    console.warn("Không có đích hoặc board không tồn tại");
+    return;
+  }
+
+  if (
+    destination.droppableId === source.droppableId &&
+    destination.index === source.index
+  ) {
+    return;
+  }
+
+  const sourceList = board.ownerList.find((list) => list._id === source.droppableId);
+  const destinationList = board.ownerList.find(
+    (list) => list._id === destination.droppableId
+  );
+
+  if (!sourceList || !destinationList) {
+    console.error("Không tìm thấy danh sách nguồn hoặc đích");
+    return;
+  }
+
+  const sourceCards = [...(sourceList.ownerCard || [])];
+  const destinationCards =
+    source.droppableId === destination.droppableId
+      ? sourceCards
+      : [...(destinationList.ownerCard || [])];
+
+  const [movedCard] = sourceCards.splice(source.index, 1);
+  destinationCards.splice(destination.index, 0, movedCard);
+
+  // Kiểm tra ID thẻ
+  const destinationCardIds = destinationCards.map((card) => card._id).filter((id) => id);
+  const sourceCardIds = sourceCards.map((card) => card._id).filter((id) => id);
+
+  if (destinationCardIds.length !== destinationCards.length || sourceCardIds.length !== sourceCards.length) {
+    console.error("Phát hiện ID thẻ không hợp lệ");
+    fetchBoard();
+    return;
+  }
+
+  const updatedLists = board.ownerList.map((list) => {
+    if (list._id === source.droppableId) {
+      return { ...list, ownerCard: sourceCards };
+    }
+    if (list._id === destination.droppableId) {
+      return { ...list, ownerCard: destinationCards };
+    }
+    return list;
+  });
+
+  setBoard({ ...board, ownerList: updatedLists });
+
+  // Cập nhật backend
+  try {
+    console.log("Cập nhật danh sách đích:", {
+      listId: destinationList._id,
+      ownerCard: destinationCardIds,
+      listName: destinationList.listName,
+      ownerBroad: board._id,
+    });
+    await axios.put(`http://localhost:3000/list/update/${destinationList._id}`, {
+      ownerCard: destinationCardIds,
+      listName: destinationList.listName, // Thêm listName
+      ownerBroad: board._id, // Thêm ownerBroad
+    });
+
+    if (source.droppableId !== destination.droppableId) {
+      console.log("Cập nhật danh sách nguồn:", {
+        listId: sourceList._id,
+        ownerCard: sourceCardIds,
+        listName: sourceList.listName,
+        ownerBroad: board._id,
+      });
+      await axios.put(`http://localhost:3000/list/update/${sourceList._id}`, {
+        ownerCard: sourceCardIds,
+        listName: sourceList.listName, // Thêm listName
+        ownerBroad: board._id, // Thêm ownerBroad
+      });
+    }
+  } catch (err: any) {
+    console.error("Lỗi khi cập nhật backend:", err);
+    console.log("Phản hồi lỗi:", err.response?.data);
+    fetchBoard(); // Khôi phục nếu lỗi
+  }
+};
+
+  // Thêm/Sửa List
   const onSubmit = async (data: ListFormInputs) => {
     try {
       if (!id) return;
@@ -122,7 +209,7 @@ export default function BoardDetail() {
     }
   };
 
-  // 🔹 Xóa List
+  // Xóa List
   const handleDelete = async (listId: string) => {
     if (!confirm("Bạn có chắc muốn xóa list này?")) return;
     try {
@@ -134,36 +221,41 @@ export default function BoardDetail() {
     }
   };
 
-  // 🔹 Sửa List
+  // Sửa List
   const handleEdit = (list: List) => {
     setEditingList(list);
     reset(list);
     setShowForm(true);
   };
 
-  // ================= CARD FUNCTIONS =================
+  // Thêm Card
+  const handleAddCard = (listId: string) => {
+    setAddingCardListId(listId);
+    setEditingCard(null);
+    setEditingCardListId(null);
+    resetCardForm({
+      cardName: "",
+      description: "",
+      dueDate: "",
+      status: false,
+    });
+  };
 
+  // Thêm/Sửa Card
   const onSubmitCard = async (data: CardFormInputs) => {
     try {
-      if (editingCard) {
-        // ✅ Sửa card
+      if (editingCard && editingCardListId) {
         await axios.put(`http://localhost:3000/card/update/${editingCard._id}`, {
           ...data,
-          ownerList: [editingCardListId],
+          ownerLists: [editingCardListId],
         });
-
         setEditingCard(null);
         setEditingCardListId(null);
-      } else {
-        // ✅ Thêm mới
-        if (!addingCardListsId) return;
-
-        const payload = {
+      } else if (addingCardListId) {
+        await axios.post("http://localhost:3000/card/create", {
           ...data,
-          ownerLists: [addingCardListsId],
-        };
-
-        await axios.post("http://localhost:3000/card/create", payload);
+          ownerLists: [addingCardListId],
+        });
         setAddingCardListId(null);
       }
 
@@ -175,15 +267,15 @@ export default function BoardDetail() {
     }
   };
 
-
+  // Sửa Card
   const handleEditCard = (listId: string, card: Card) => {
     setEditingCard(card);
     setEditingCardListId(listId);
-    setAddingCardListId(null); // ✅ Tắt form thêm nếu đang mở
-    resetCardForm(card); // Đổ dữ liệu cũ vào form
+    setAddingCardListId(null);
+    resetCardForm(card);
   };
 
-
+  // Xóa Card
   const handleDeleteCard = async (cardId: string) => {
     if (!confirm("Bạn có chắc muốn xóa thẻ này?")) return;
     try {
@@ -195,312 +287,565 @@ export default function BoardDetail() {
     }
   };
 
-  // ================= RENDER =================
-
   if (loading) return <p className="p-6">Đang tải dữ liệu...</p>;
   if (!board) return <p className="p-6 text-red-500">Không tìm thấy board!</p>;
 
   return (
-    <div className="p-6">
-      <button
-        onClick={() => nav("/Layout")}
-        className="bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium py-2 px-4 rounded-xl mb-4"
-      >
-        Trang Chủ
-      </button>
-
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-black-700">{board.broadName}</h1>
-        <p className="text-gray-600 mt-2">{board.description}</p>
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 relative overflow-hidden">
+      {/* Animated Background */}
+      <div className="absolute inset-0 overflow-hidden">
+        <div className="absolute -top-40 -right-40 w-96 h-96 bg-blue-500/10 rounded-full mix-blend-multiply filter blur-3xl animate-pulse"></div>
+        <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-indigo-500/10 rounded-full mix-blend-multiply filter blur-3xl animate-pulse delay-1000"></div>
+        <div className="absolute top-40 left-40 w-96 h-96 bg-purple-500/10 rounded-full mix-blend-multiply filter blur-3xl animate-pulse delay-2000"></div>
       </div>
 
-      {!showForm && !editingList && (
-        <button
-          onClick={() => setShowForm(true)}
-          className="bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium py-2 px-4 rounded-xl mb-4"
-        >
-          ➕ Thêm danh sách
-        </button>
-      )}
-
-      {(showForm || editingList) && (
-        <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-200 mb-6 w-[320px]">
-          <h2 className="text-lg font-semibold text-gray-700 mb-2">
-            {editingList ? "✏️ Sửa danh sách" : "➕ Thêm danh sách"}
-          </h2>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
-            <input
-              {...register("listName", { required: "Tên list là bắt buộc" })}
-              placeholder="Tên danh sách..."
-              className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400"
-            />
-            {errors.listName && <p className="text-red-500 text-xs">{errors.listName.message}</p>}
-
-            <textarea
-              {...register("description")}
-              placeholder="Mô tả..."
-              className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400"
-            />
-
-            <select
-              {...register("status")}
-              className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400"
-            >
-              <option value="việc cần làm">Việc cần làm</option>
-              <option value="đang thực hiện">Đang thực hiện</option>
-              <option value="đã xong">Đã xong</option>
-            </select>
-
-            <div className="flex gap-2">
+      {/* Header */}
+      <header className="relative bg-white/5 backdrop-blur-xl border-b border-white/10 shadow-2xl">
+        <div className="w-full px-4 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
               <button
-                type="submit"
-                className="flex-1 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium py-2 rounded-xl"
+                onClick={() => nav("/Layout")}
+                className="flex items-center space-x-2 bg-white/10 backdrop-blur-sm hover:bg-white/20 text-white font-semibold py-2 px-4 rounded-xl transition-all duration-300 hover:scale-105 shadow-lg border border-white/20"
               >
-                {editingList ? "Cập nhật" : "Thêm mới"}
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                </svg>
+                <span className="text-sm">Dashboard</span>
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  reset();
-                  setEditingList(null);
-                  setShowForm(false);
-                }}
-                className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-800 text-sm font-medium py-2 rounded-xl"
-              >
-                Hủy
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* Hiển thị danh sách List và Card */}
-      <div className="flex gap-4 overflow-x-auto pb-4">
-        {board.ownerList.length > 0 ? (
-          board.ownerList.map((list) => (
-            <div
-              key={list._id}
-              className={`min-w-[260px] rounded-xl shadow p-4 border border-gray-200 ${list.status === "đã xong"
-                ? "bg-green-100"
-                : list.status === "đang thực hiện"
-                  ? "bg-yellow-100"
-                  : "bg-blue-100"
-                }`}
-            >
-              <div className="flex justify-between items-center mb-2">
-                <h3 className="font-bold text-blue-800">{list.listName}</h3>
-                <div className="flex gap-2">
-                  <button onClick={() => handleEdit(list)} className="text-blue-500 hover:text-blue-700">
-                    <Pencil size={16} />
-                  </button>
-                  <button onClick={() => handleDelete(list._id)} className="text-red-500 hover:text-red-700">
-                    <Trash2 size={16} />
-                  </button>
+              <div className="h-6 w-px bg-white/20"></div>
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 bg-gradient-to-br from-blue-500 via-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
+                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                  </svg>
+                </div>
+                <div>
+                  <h1 className="text-xl font-bold bg-gradient-to-r from-white via-blue-100 to-indigo-200 bg-clip-text text-transparent">
+                    {board.broadName}
+                  </h1>
+                  <p className="text-blue-200/80 text-xs">Project Management</p>
                 </div>
               </div>
+            </div>
+            <div className="flex items-center space-x-3">
+              <div className="bg-white/10 backdrop-blur-sm rounded-xl px-3 py-1 border border-white/20">
+                <span className="text-white/80 text-xs font-medium">{board.ownerList.length} Lists</span>
+              </div>
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-indigo-500 rounded-xl flex items-center justify-center shadow-lg hover:scale-105 transition-transform cursor-pointer">
+                <span className="text-white font-bold text-sm">U</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
 
-              <p className="text-sm text-gray-700 mb-2">{list.description}</p>
-              <span className="inline-block px-2 py-1 text-xs rounded-lg bg-white/60 font-medium text-gray-700">
-                {list.status}
-              </span>
+      {/* Main Content */}
+      <main className="relative p-2">
+        <div className="w-full">
+          {/* Project Description */}
+          <div className="mb-4">
+            <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-4 border border-white/10 shadow-lg">
+              <div className="flex items-start space-x-3">
+                <div className="w-8 h-8 bg-gradient-to-br from-blue-500 via-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
+                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <h2 className="text-sm font-bold text-white mb-1">Mô tả dự án</h2>
+                  <p className="text-white/80 text-xs leading-relaxed">{board.description}</p>
+                </div>
+              </div>
+            </div>
+          </div>
 
-              {/* Danh sách Card */}
-              <div className="bg-white/60 p-2 rounded-lg mt-2">
-                <h4 className="text-sm font-semibold mb-2"> Thẻ công việc</h4>
+          {/* Add List Button */}
+          {!showForm && !editingList && (
+            <div className="mb-4">
+              <button
+                onClick={() => setShowForm(true)}
+                className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:via-indigo-500 hover:to-purple-500 text-white font-bold py-2 px-4 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 flex items-center space-x-2 backdrop-blur-xl border border-white/20 text-sm"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                <span>Thêm danh sách mới</span>
+              </button>
+            </div>
+          )}
 
-                {list.ownerCard && list.ownerCard.length > 0 ? (
-                  list.ownerCard.map((card) => (
-                    <div key={card._id} className="bg-white border border-gray-300 rounded-lg p-2 mb-2 shadow-sm">
-                      {/* Dòng trên: cardName bên trái, nút chỉnh sửa xóa bên phải */}
-                      <div className="flex justify-between items-center">
-                        <span className="font-medium text-gray-800">{card.cardName}</span>
+          {/* Add/Edit List Form */}
+          {(showForm || editingList) && (
+            <div className="mb-6">
+              <div className="bg-white/10 backdrop-blur-2xl rounded-2xl p-4 border border-white/20 shadow-lg">
+                <div className="flex items-center space-x-3 mb-4">
+                  <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-xl flex items-center justify-center">
+                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                  </div>
+                  <h2 className="text-lg font-bold text-white">
+                    {editingList ? "Chỉnh sửa danh sách" : "Tạo danh sách mới"}
+                  </h2>
+                </div>
 
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleEditCard(list._id, card)}
-                            className="text-blue-500 hover:text-blue-700"
-                          >
-                            <Pencil size={14} />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteCard(card._id)}
-                            className="text-red-500 hover:text-red-700"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Dòng dưới: description */}
-                      <p className="text-gray-600 text-sm mt-1">{card.description || "Không có mô tả"}</p>
-
-                      {/* Hiển thị hạn nộp nếu có */}
-                      {card.dueDate && (
-                        <p className="text-xs text-red-500 mt-1">
-                          Hạn nộp: {new Date(card.dueDate).toLocaleDateString('vi-VN')}
+                <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-white font-semibold mb-2 text-sm">Tên danh sách</label>
+                      <input
+                        {...register("listName", { required: "Tên list là bắt buộc" })}
+                        placeholder="Nhập tên danh sách..."
+                        className="w-full border-2 border-white/20 bg-white/10 backdrop-blur-sm rounded-xl px-3 py-2 text-white placeholder-white/50 focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-300 text-sm"
+                      />
+                      {errors.listName && (
+                        <p className="text-red-400 text-xs mt-1 flex items-center">
+                          <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          {errors.listName.message}
                         </p>
                       )}
                     </div>
-                  ))
-                ) : (
-                  <p className="text-xs text-gray-500">Chưa có thẻ nào.</p>
-                )}
 
+                    <div>
+                      <label className="block text-white font-semibold mb-2 text-sm">Trạng thái</label>
+                      <select
+                        {...register("status")}
+                        className="w-full border-2 border-white/20 bg-white/10 backdrop-blur-sm rounded-xl px-3 py-2 text-white focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-300 text-sm"
+                      >
+                        <option value="việc cần làm" className="bg-gray-800">Việc cần làm</option>
+                        <option value="đang thực hiện" className="bg-gray-800">Đang thực hiện</option>
+                        <option value="đã xong" className="bg-gray-800">Đã xong</option>
+                      </select>
+                    </div>
+                  </div>
 
-
-                {/* Form thêm card */}
-                {/* Form thêm/sửa card */}
-                {/* FORM SỬA THẺ */}
-                {editingCard && editingCardListId === list._id && (
-                  <form onSubmit={handleSubmitCard(onSubmitCard)} className="bg-white p-2 rounded-lg mt-2 border">
-                    <h4 className="text-sm font-semibold mb-2">✏️ Sửa thẻ</h4>
-
-                    {/* Các input giữ nguyên */}
-                    <input
-                      {...registerCard("cardName", { required: "Tên thẻ là bắt buộc" })}
-                      placeholder="Tên thẻ..."
-                      className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm mb-2 focus:ring-2 focus:ring-blue-400"
-                    />
-                    {cardErrors.cardName && (
-                      <p className="text-xs text-red-500">{cardErrors.cardName.message}</p>
-                    )}
-
+                  <div>
+                    <label className="block text-white font-semibold mb-2 text-sm">Mô tả</label>
                     <textarea
-                      {...registerCard("description")}
-                      placeholder="Mô tả..."
-                      className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm mb-2 focus:ring-2 focus:ring-blue-400"
+                      {...register("description")}
+                      placeholder="Mô tả chi tiết về danh sách..."
+                      className="w-full border-2 border-white/20 bg-white/10 backdrop-blur-sm rounded-xl px-3 py-2 text-white placeholder-white/50 focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-300 resize-none text-sm"
+                      rows={3}
                     />
+                  </div>
 
-                    <label className="text-xs text-gray-600">Hạn nộp:</label>
-                    <input
-                      type="date"
-                      {...registerCard("dueDate")}
-                      className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm mb-2"
-                    />
-
-                    <div className="flex items-center gap-2 mb-2">
-                      <input
-                        type="checkbox"
-                        {...registerCard("status")}
-                        id={`status-${list._id}`}
-                      />
-                      <label htmlFor={`status-${list._id}`} className="text-xs text-gray-600">Hoàn thành</label>
-                    </div>
-
-                    <div className="flex gap-2">
-                      <button
-                        type="submit"
-                        className="flex-1 bg-blue-500 hover:bg-blue-600 text-white text-xs font-medium py-1 rounded-lg"
-                      >
-                        Cập nhật
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          resetCardForm();
-                          setEditingCard(null);
-                          setEditingCardListId(null);
-                        }}
-                        className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-800 text-xs font-medium py-1 rounded-lg"
-                      >
-                        Hủy
-                      </button>
-                    </div>
-                  </form>
-                )}
-
-                {/* FORM THÊM THẺ */}
-                {!editingCard && addingCardListsId === list._id && (
-                  <form onSubmit={handleSubmitCard(onSubmitCard)} className="bg-white p-2 rounded-lg mt-2 border">
-                    <h4 className="text-sm font-semibold mb-2">➕ Thêm thẻ</h4>
-
-                    {/* Các input giống nhau nên có thể extract ra component sau */}
-                    <input
-                      {...registerCard("cardName", { required: "Tên thẻ là bắt buộc" })}
-                      placeholder="Tên thẻ..."
-                      className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm mb-2 focus:ring-2 focus:ring-blue-400"
-                    />
-                    {cardErrors.cardName && (
-                      <p className="text-xs text-red-500">{cardErrors.cardName.message}</p>
-                    )}
-
-                    <textarea
-                      {...registerCard("description")}
-                      placeholder="Mô tả..."
-                      className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm mb-2 focus:ring-2 focus:ring-blue-400"
-                    />
-
-                    <label className="text-xs text-gray-600">Hạn nộp:</label>
-                    <input
-                      type="date"
-                      {...registerCard("dueDate")}
-                      className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm mb-2"
-                    />
-
-                    <div className="flex items-center gap-2 mb-2">
-                      <input
-                        type="checkbox"
-                        {...registerCard("status")}
-                        id={`status-${list._id}`}
-                      />
-                      <label htmlFor={`status-${list._id}`} className="text-xs text-gray-600">Hoàn thành</label>
-                    </div>
-
-                    <div className="flex gap-2">
-                      <button
-                        type="submit"
-                        className="flex-1 bg-blue-500 hover:bg-blue-600 text-white text-xs font-medium py-1 rounded-lg"
-                      >
-                        Thêm
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          resetCardForm();
-                          setAddingCardListId(null);
-                        }}
-                        className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-800 text-xs font-medium py-1 rounded-lg"
-                      >
-                        Hủy
-                      </button>
-                    </div>
-                  </form>
-                )}
-
-
-
-                {/* Nếu không đang sửa và list này chưa mở form thêm card thì hiện nút Thêm thẻ */}
-                {!editingCard && addingCardListsId !== list._id && editingCardListId !== list._id && (
-                  <button
-                    onClick={() => {
-                      setAddingCardListId(list._id);
-                      setEditingCard(null);
-                      setEditingCardListId(null);
-                      resetCardForm({
-                        cardName: "",
-                        description: "",
-                        dueDate: "",
-                        status: false,
-                      }); // ✅ Reset rõ ràng
-                    }}
-                    className="w-full text-xs bg-blue-500 hover:bg-blue-600 text-white rounded-lg py-1 mt-2"
-                  >
-                    ➕ Thêm thẻ
-                  </button>
-
-                )}
-
-
-
-
-
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      type="submit"
+                      className="flex-1 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:via-indigo-500 hover:to-purple-500 text-white font-bold py-2 rounded-xl transition-all duration-300 hover:scale-105 shadow-lg text-sm"
+                    >
+                      {editingList ? "Cập nhật danh sách" : "Tạo danh sách"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        reset();
+                        setEditingList(null);
+                        setShowForm(false);
+                      }}
+                      className="flex-1 bg-white/10 hover:bg-white/20 text-white font-semibold py-2 rounded-xl transition-all duration-300 hover:scale-105 backdrop-blur-sm border border-white/20 text-sm"
+                    >
+                      Hủy bỏ
+                    </button>
+                  </div>
+                </form>
               </div>
             </div>
-          ))
-        ) : (
-          <p className="text-gray-500">Chưa có danh sách nào.</p>
-        )}
-      </div>
+          )}
+
+          {/* Kanban Board */}
+          <DragDropContext onDragEnd={handleDragEnd}>
+            <div className="flex gap-3 overflow-x-auto pb-4">
+              {board.ownerList.length > 0 ? (
+                board.ownerList.map((list, index) => (
+                  <Droppable droppableId={list._id} key={list._id}>
+                    {(provided) => (
+                      <div
+                        {...provided.droppableProps}
+                        ref={provided.innerRef}
+                        className={`min-w-[300px] rounded-2xl shadow-lg p-4 border-2 transition-all duration-500 hover:shadow-xl hover:scale-105 backdrop-blur-xl ${
+                          list.status === "đã xong"
+                            ? "bg-gradient-to-br from-green-500/20 to-emerald-600/20 border-green-400/30"
+                            : list.status === "đang thực hiện"
+                            ? "bg-gradient-to-br from-yellow-500/20 to-amber-600/20 border-yellow-400/30"
+                            : "bg-gradient-to-br from-blue-500/20 to-indigo-600/20 border-blue-400/30"
+                        }`}
+                        style={{ animationDelay: `${index * 150}ms` }}
+                      >
+                        {/* List Header */}
+                        <div className="flex justify-between items-center mb-4">
+                          <div className="flex items-center space-x-3">
+                            <div
+                              className={`w-8 h-8 rounded-xl flex items-center justify-center shadow-lg ${
+                                list.status === "đã xong"
+                                  ? "bg-green-500/30"
+                                  : list.status === "đang thực hiện"
+                                  ? "bg-yellow-500/30"
+                                  : "bg-blue-500/30"
+                              }`}
+                            >
+                              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
+                                />
+                              </svg>
+                            </div>
+                            <div>
+                              <h3 className="text-lg font-bold text-white">{list.listName}</h3>
+                              <p className="text-white/70 text-xs">{list.description}</p>
+                            </div>
+                          </div>
+                          <div className="flex gap-1">
+                            <button
+                              onClick={() => handleEdit(list)}
+                              className="p-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-xl transition-all duration-200 hover:scale-110 shadow-lg"
+                            >
+                              <Pencil size={14} className="text-white" />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(list._id)}
+                              className="p-2 bg-red-500/20 hover:bg-red-500/30 backdrop-blur-sm rounded-xl transition-all duration-200 hover:scale-110 shadow-lg"
+                            >
+                              <Trash2 size={14} className="text-white" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Status Badge */}
+                        <div className="mb-3">
+                          <span
+                            className={`inline-block px-3 py-1 text-xs rounded-lg font-semibold ${
+                              list.status === "đã xong"
+                                ? "bg-green-500/30 text-green-200 border border-green-400/30"
+                                : list.status === "đang thực hiện"
+                                ? "bg-yellow-500/30 text-yellow-200 border border-yellow-400/30"
+                                : "bg-blue-500/30 text-blue-200 border border-blue-400/30"
+                            }`}
+                          >
+                            {list.status}
+                          </span>
+                        </div>
+
+                        {/* Cards Section */}
+                        <div className="bg-white/10 backdrop-blur-xl rounded-xl p-3 border border-white/20 shadow-lg">
+                          <div className="flex items-center justify-between mb-3">
+                            <h4 className="text-sm font-semibold text-white flex items-center">
+                              <svg className="w-4 h-4 mr-2 text-white/70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                                />
+                              </svg>
+                              Tasks ({list.ownerCard?.length || 0})
+                            </h4>
+                            <button
+                              onClick={() => handleAddCard(list._id)}
+                              className="bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-400 hover:to-indigo-500 text-white font-bold py-1 px-3 rounded-lg transition-all duration-300 hover:scale-105 shadow-lg text-xs"
+                            >
+                              <span className="flex items-center space-x-1">
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                </svg>
+                                <span>Thêm task</span>
+                              </span>
+                            </button>
+                          </div>
+
+                          {list.ownerCard && list.ownerCard.length > 0 ? (
+                            <div className="space-y-4">
+                              {list.ownerCard.map((card, cardIndex) => (
+                                <Draggable key={card._id} draggableId={card._id} index={cardIndex}>
+                                  {(provided, snapshot) => (
+                                    <div
+                                      {...provided.draggableProps}
+                                      {...provided.dragHandleProps}
+                                      ref={provided.innerRef}
+                                      className={`bg-white/20 backdrop-blur-sm border border-white/30 rounded-2xl p-5 shadow-lg hover:shadow-xl transition-all duration-300 hover:bg-white/30 hover:scale-105 ${
+                                        snapshot.isDragging ? "opacity-80" : ""
+                                      }`}
+                                    >
+                                      {/* Card Header */}
+                                      <div className="flex justify-between items-start mb-4">
+                                        <h5 className="font-bold text-white text-lg leading-tight">{card.cardName}</h5>
+                                        <div className="flex gap-2">
+                                          <button
+                                            onClick={() => handleEditCard(list._id, card)}
+                                            className="p-2 bg-blue-500/30 hover:bg-blue-500/50 rounded-xl transition-all duration-200 hover:scale-110"
+                                          >
+                                            <Pencil size={14} className="text-white" />
+                                          </button>
+                                          <button
+                                            onClick={() => handleDeleteCard(card._id)}
+                                            className="p-2 bg-red-500/30 hover:bg-red-500/50 rounded-xl transition-all duration-200 hover:scale-110"
+                                          >
+                                            <Trash2 size={14} className="text-white" />
+                                          </button>
+                                        </div>
+                                      </div>
+
+                                      {/* Card Description */}
+                                      <p className="text-white/80 text-sm mb-4 leading-relaxed">
+                                        {card.description || "Không có mô tả"}
+                                      </p>
+
+                                      {/* Due Date */}
+                                      {card.dueDate && (
+                                        <div className="flex items-center space-x-2 bg-red-500/20 rounded-xl px-3 py-2">
+                                          <svg className="w-4 h-4 text-red-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path
+                                              strokeLinecap="round"
+                                              strokeLinejoin="round"
+                                              strokeWidth={2}
+                                              d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                                            />
+                                          </svg>
+                                          <p className="text-red-200 text-sm font-medium">
+                                            Due: {new Date(card.dueDate).toLocaleDateString("vi-VN")}
+                                          </p>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </Draggable>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-center py-12">
+                              <div className="w-16 h-16 bg-white/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                                <svg className="w-8 h-8 text-white/50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                                  />
+                                </svg>
+                              </div>
+                              <p className="text-white/60 text-sm">Chưa có task nào</p>
+                            </div>
+                          )}
+
+                          {/* FORM SỬA THẺ */}
+                          {editingCard && editingCardListId === list._id && (
+                            <form
+                              onSubmit={handleSubmitCard(onSubmitCard)}
+                              className="bg-white/90 backdrop-blur-sm p-4 rounded-xl mt-4 border-2 border-blue-200 shadow-lg"
+                            >
+                              <div className="flex items-center space-x-2 mb-4">
+                                <div className="w-6 h-6 bg-blue-500 rounded-lg flex items-center justify-center">
+                                  <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                                    />
+                                  </svg>
+                                </div>
+                                <h4 className="text-sm font-semibold text-gray-800">Sửa thẻ</h4>
+                              </div>
+
+                              <div className="space-y-3">
+                                <input
+                                  {...registerCard("cardName", { required: "Tên thẻ là bắt buộc" })}
+                                  placeholder="Tên thẻ..."
+                                  className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200"
+                                />
+                                {cardErrors.cardName && (
+                                  <p className="text-xs text-red-500 flex items-center">
+                                    <span className="w-2 h-2 bg-red-500 rounded-full mr-2"></span>
+                                    {cardErrors.cardName.message}
+                                  </p>
+                                )}
+
+                                <textarea
+                                  {...registerCard("description")}
+                                  placeholder="Mô tả..."
+                                  className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 resize-none"
+                                  rows={2}
+                                />
+
+                                <div>
+                                  <label className="text-xs text-gray-600 font-medium mb-1 block">Hạn nộp:</label>
+                                  <input
+                                    type="date"
+                                    {...registerCard("dueDate")}
+                                    className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200"
+                                  />
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="checkbox"
+                                    {...registerCard("status")}
+                                    id={`status-edit-${list._id}`}
+                                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                                  />
+                                  <label htmlFor={`status-edit-${list._id}`} className="text-xs text-gray-600 font-medium">
+                                    Hoàn thành
+                                  </label>
+                                </div>
+
+                                <div className="flex gap-2 pt-2">
+                                  <button
+                                    type="submit"
+                                    className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-sm font-semibold py-2 rounded-xl transition-all duration-200 hover:scale-105"
+                                  >
+                                    Cập nhật
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      resetCardForm();
+                                      setEditingCard(null);
+                                      setEditingCardListId(null);
+                                    }}
+                                    className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm font-semibold py-2 rounded-xl transition-all duration-200 hover:scale-105"
+                                  >
+                                    Hủy
+                                  </button>
+                                </div>
+                              </div>
+                            </form>
+                          )}
+
+                          {/* FORM THÊM THẺ */}
+                          {!editingCard && addingCardListId === list._id && (
+                            <form
+                              onSubmit={handleSubmitCard(onSubmitCard)}
+                              className="bg-white/90 backdrop-blur-sm p-4 rounded-xl mt-4 border-2 border-green-200 shadow-lg"
+                            >
+                              <div className="flex items-center space-x-2 mb-4">
+                                <div className="w-6 h-6 bg-green-500 rounded-lg flex items-center justify-center">
+                                  <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                  </svg>
+                                </div>
+                                <h4 className="text-sm font-semibold text-gray-800">Thêm thẻ</h4>
+                              </div>
+
+                              <div className="space-y-3">
+                                <input
+                                  {...registerCard("cardName", { required: "Tên thẻ là bắt buộc" })}
+                                  placeholder="Tên thẻ..."
+                                  className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200"
+                                />
+                                {cardErrors.cardName && (
+                                  <p className="text-xs text-red-500 flex items-center">
+                                    <span className="w-2 h-2 bg-red-500 rounded-full mr-2"></span>
+                                    {cardErrors.cardName.message}
+                                  </p>
+                                )}
+
+                                <textarea
+                                  {...registerCard("description")}
+                                  placeholder="Mô tả..."
+                                  className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 resize-none"
+                                  rows={2}
+                                />
+
+                                <div>
+                                  <label className="text-xs text-gray-600 font-medium mb-1 block">Hạn nộp:</label>
+                                  <input
+                                    type="date"
+                                    {...registerCard("dueDate")}
+                                    className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200"
+                                  />
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="checkbox"
+                                    {...registerCard("status")}
+                                    id={`status-add-${list._id}`}
+                                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                                  />
+                                  <label htmlFor={`status-add-${list._id}`} className="text-xs text-gray-600 font-medium">
+                                    Hoàn thành
+                                  </label>
+                                </div>
+
+                                <div className="flex gap-2 pt-2">
+                                  <button
+                                    type="submit"
+                                    className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white text-sm font-semibold py-2 rounded-xl transition-all duration-200 hover:scale-105"
+                                  >
+                                    Thêm
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      resetCardForm();
+                                      setAddingCardListId(null);
+                                    }}
+                                    className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm font-semibold py-2 rounded-xl transition-all duration-200 hover:scale-105"
+                                  >
+                                    Hủy
+                                  </button>
+                                </div>
+                              </div>
+                            </form>
+                          )}
+
+                          {/* Add Card Button */}
+                          {!editingCard && addingCardListId !== list._id && editingCardListId !== list._id && (
+                            <button
+                              onClick={() => handleAddCard(list._id)}
+                              className="w-full bg-gradient-to-r from-blue-500/30 to-indigo-500/30 hover:from-blue-500/50 hover:to-indigo-500/50 text-white font-semibold py-4 rounded-2xl mt-6 transition-all duration-300 hover:scale-105 shadow-lg hover:shadow-xl flex items-center justify-center space-x-3 backdrop-blur-sm border border-white/20"
+                            >
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                              </svg>
+                              <span>Thêm task mới</span>
+                            </button>
+                          )}
+                        </div>
+                        {provided.placeholder}
+                      </div>
+                    )}
+                  </Droppable>
+                ))
+              ) : (
+                <div className="text-center py-32">
+                  <div className="w-32 h-32 bg-gradient-to-br from-white/10 to-white/5 rounded-4xl flex items-center justify-center mx-auto mb-12 shadow-2xl backdrop-blur-xl border border-white/20">
+                    <svg className="w-16 h-16 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={1.5}
+                        d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
+                      />
+                    </svg>
+                  </div>
+                  <h3 className="text-4xl font-bold text-white mb-6">Chưa có danh sách nào</h3>
+                  <p className="text-white/70 mb-12 text-xl max-w-2xl mx-auto leading-relaxed">
+                    Tạo danh sách đầu tiên để bắt đầu quản lý công việc một cách chuyên nghiệp
+                  </p>
+                  <button
+                    onClick={() => setShowForm(true)}
+                    className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:via-indigo-500 hover:to-purple-500 px-12 py-6 rounded-2xl text-white font-bold text-xl shadow-2xl hover:shadow-3xl transition-all duration-300 hover:scale-105 backdrop-blur-xl border border-white/20"
+                  >
+                    <span className="flex items-center space-x-3">
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                      <span>Tạo danh sách đầu tiên</span>
+                    </span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </DragDropContext>
+        </div>
+      </main>
     </div>
   );
 }

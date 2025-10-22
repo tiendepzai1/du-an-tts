@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bell, Share2, Star, MoreHorizontal, Search, Grid, LogOut } from "lucide-react";
+import { Bell, Share2, Star, MoreHorizontal, Grid, LogOut } from "lucide-react";
 
 export default function BoardPage() {
   const nav = useNavigate();
@@ -66,16 +66,7 @@ export default function BoardPage() {
         </div>
 
         {/* CENTER: Search */}
-        <div className="flex-1 mx-6 hidden md:block">
-          <div className="flex items-center bg-[#2a2a3d] rounded-md px-3 py-1 border border-gray-700 focus-within:ring-2 focus-within:ring-blue-500">
-            <Search className="w-4 h-4 text-gray-400 mr-2" />
-            <input
-              type="text"
-              placeholder="Tìm kiếm..."
-              className="bg-transparent w-full text-sm placeholder-gray-400 focus:outline-none text-white"
-            />
-          </div>
-        </div>
+        
 
         {/* RIGHT SIDE */}
         <div className="flex items-center gap-4 relative" ref={menuRef}>
