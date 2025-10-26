@@ -1,8 +1,8 @@
 import React from "react";
+import { Outlet } from "react-router-dom"; // Import Outlet
 import Background from "../components/Background";
 import Header from "../components/header.tsx";
 
-import BoardPage from "../page/board/BoardPage.tsx"; // 👈 import thêm BoardPage
 
 const Layout: React.FC = () => {
   return (
@@ -12,11 +12,10 @@ const Layout: React.FC = () => {
 
       {/* Thân trang */}
       <div className="flex">
-
-
         {/* Nội dung chính (BoardPage hoặc các page khác) */}
         <div className="flex-1 p-6 overflow-y-auto">
-          <BoardPage />
+       
+          <Outlet /> {/* Render route con (BoardPage hoặc BoardDetail) */}
         </div>
       </div>
     </Background>

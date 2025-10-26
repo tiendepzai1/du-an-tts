@@ -32,32 +32,31 @@ export const Login = () => {
     resolver: zodResolver(authSchema),
   });
 
-  const onSubmit = async (data: IAuth) => {
-    try {
-      // Đăng nhập
-      const res = await axiosClient.post("/user/login", data);
+const onSubmit = async (data: IAuth) => {
+  try {
+    const res = await axiosClient.post("/user/login", {
+      email: data.email,
+      password: data.password,
+    });
 
-      console.log("Phản hồi từ backend:", res.data);
+    console.log("Phản hồi từ backend:", res.data);
 
-      // ✅ Lưu token và username vào localStorage
-      localStorage.setItem("token", res.data.token);
-      localStorage.setItem(
-        "username",
-        JSON.stringify({ username: res.data.data.username })
-      );
+    localStorage.setItem("token", res.data.token);
+    console.log("Token saved:", res.data.token);
 
-      alert("Đăng nhập thành công!");
-      nav("/Layout");
-    } catch (error: any) {
-      if (error.response) {
-        console.error("Lỗi từ backend:", error.response.data);
-        alert(error.response.data.message || "Đăng nhập thất bại!");
-      } else {
-        console.error(error);
-        alert("Lỗi kết nối đến server!");
-      }
+    alert("Đăng nhập thành công!");
+    console.log("Navigating to /broad");
+    nav("/broad"); // Chuyển hướng tới /broad
+  } catch (error: any) {
+    if (error.response) {
+      console.error("Lỗi từ backend:", error.response.data);
+      alert(error.response.data.message || "Đăng nhập thất bại!");
+    } else {
+      console.error("Lỗi kết nối:", error);
+      alert("Lỗi kết nối đến server!");
     }
-  };
+  }
+};
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 relative overflow-hidden flex items-center justify-center p-4">
@@ -125,11 +124,10 @@ export const Login = () => {
                 type="text"
                 {...register("username")}
                 placeholder="Nhập tên đăng nhập..."
-                className={`w-full pl-12 pr-4 py-3 border-2 ${
-                  errors?.username
+                className={`w-full pl-12 pr-4 py-3 border-2 ${errors?.username
                     ? "border-red-400/50 bg-red-500/10"
                     : "border-white/20 bg-white/10 hover:bg-white/15"
-                } rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-300 text-sm text-white placeholder-white/50 backdrop-blur-sm`}
+                  } rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-300 text-sm text-white placeholder-white/50 backdrop-blur-sm`}
               />
             </div>
             {errors?.username && (
@@ -164,11 +162,10 @@ export const Login = () => {
                 type="email"
                 {...register("email")}
                 placeholder="Nhập email của bạn..."
-                className={`w-full pl-16 pr-6 py-5 border-2 ${
-                  errors?.email
+                className={`w-full pl-16 pr-6 py-5 border-2 ${errors?.email
                     ? "border-red-400/50 bg-red-500/10"
                     : "border-white/20 bg-white/10 hover:bg-white/15"
-                } rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-300 text-xl text-white placeholder-white/50 backdrop-blur-sm`}
+                  } rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-300 text-xl text-white placeholder-white/50 backdrop-blur-sm`}
               />
             </div>
             {errors?.email && (
@@ -203,11 +200,10 @@ export const Login = () => {
                 type="password"
                 {...register("password")}
                 placeholder="••••••••"
-                className={`w-full pl-16 pr-6 py-5 border-2 ${
-                  errors?.password
+                className={`w-full pl-16 pr-6 py-5 border-2 ${errors?.password
                     ? "border-red-400/50 bg-red-500/10"
                     : "border-white/20 bg-white/10 hover:bg-white/15"
-                } rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-300 text-xl text-white placeholder-white/50 backdrop-blur-sm`}
+                  } rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-300 text-xl text-white placeholder-white/50 backdrop-blur-sm`}
               />
             </div>
             {errors?.password && (

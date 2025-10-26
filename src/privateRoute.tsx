@@ -1,18 +1,14 @@
-import type { ReactNode } from "react";
-import { Navigate } from "react-router-dom";
+// privateRoute.tsx
+import { Navigate, Outlet } from "react-router-dom";
 
-interface PrivateRouteProps {
-  children: ReactNode;
-}
+const PrivateRoute = () => {
+  const token = localStorage.getItem("token");
 
-const PrivateRoute = ({ children }: PrivateRouteProps) => {
-  const user = localStorage.getItem("username");
-
-  if (!user) {
+  if (!token) {
     return <Navigate to="/login" replace />;
   }
 
-  return <>{children}</>;
+  return <Outlet />; // Render các route con
 };
 
 export default PrivateRoute;

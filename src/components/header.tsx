@@ -2,7 +2,8 @@ import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Bell, Share2, Star, MoreHorizontal, Grid, LogOut } from "lucide-react";
 
-export default function BoardPage() {
+
+export default function Header() {
   const nav = useNavigate();
   const [user, setUser] = useState<{ username: string } | null>(null);
   const [showMenu, setShowMenu] = useState(false);

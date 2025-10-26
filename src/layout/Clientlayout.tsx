@@ -1,14 +1,15 @@
 
-import { Header } from './Header'
-import { Outlet } from 'react-router-dom'
+import { Outlet } from "react-router-dom";
 
-const Clientlayout = () => {
+const Layout = () => {
   return (
-   <>
-   <Header/>
-   <Outlet/>
-   </>
-  )
-}
+    <>
+ 
+      <main className="min-h-screen">
+        <Outlet />
+      </main>
+    </>
+  );
+};
 
-export default Clientlayout
+export default Layout;
