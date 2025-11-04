@@ -1,8 +1,15 @@
 import { Plus, ArrowUpRight, Edit, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useForm } from "react-hook-form";
+
+// Helper type cho Current User (Dựa trên dữ liệu lưu trong localStorage)
+type CurrentUser = {
+  _id: string;
+  name: string;
+  email: string;
+};
 
 type Board = {
   _id: string;
@@ -10,11 +17,26 @@ type Board = {
   description: string;
   createdAt: string;
   updatedAt: string;
+  ownerList?: any[];
+  ownerUser?: any[];
 };
 
 type BoardFormInputs = {
   broadName: string;
   description: string;
+};
+
+// Helper function to get user data from localStorage
+const getCurrentUser = (): CurrentUser | null => {
+  const userJson = localStorage.getItem("user");
+  if (userJson) {
+    try {
+      return JSON.parse(userJson) as CurrentUser;
+    } catch (e) {
+      return null;
+    }
+  }
+  return null;
 };
 
 export default function BoardPage() {
@@ -23,6 +45,7 @@ export default function BoardPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedBoard, setSelectedBoard] = useState<Board | null>(null);
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const navigate = useNavigate();
 
   const {
@@ -33,30 +56,58 @@ export default function BoardPage() {
     setValue,
   } = useForm<BoardFormInputs>();
 
-  useEffect(() => {
-    fetchBoards();
-  }, []);
+  const handleAuthError = (error: any) => {
+    if (axios.isAxiosError(error) && error.response?.status === 401) {
+      alert("Phiên đăng nhập hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.");
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      navigate("/login");
+      return true;
+    }
+    return false;
+  };
 
-  const fetchBoards = async () => {
+  const fetchBoards = useCallback(async () => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      setIsLoading(false);
+      return navigate("/login");
+    }
+
     try {
       setIsLoading(true);
-      const response = await axios.get("http://localhost:3000/broad/list");
+      const response = await axios.get("http://localhost:3000/broad/list", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
       if (response.data.data) {
         setBoards(response.data.data);
+      } else {
+        setBoards([]);
       }
     } catch (error) {
       console.error("Lỗi khi tải danh sách boards:", error);
+      if (!handleAuthError(error)) {
+        setBoards([]);
+        alert("Lỗi khi tải danh sách board. Vui lòng kiểm tra console.");
+      }
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [navigate]); // navigate là dependency của useCallback
+
+  useEffect(() => {
+    setCurrentUser(getCurrentUser());
+    fetchBoards();
+  }, [fetchBoards]); // ✅ FIX: Hàm ổn định (useCallback) -> đảm bảo fetchBoards được gọi lại sau khi tải lại trang
+
 
   const handleBoardClick = (boardId: string) => {
     navigate(`/detail/${boardId}`);
   };
 
   const handleEditBoard = (board: Board, e: React.MouseEvent) => {
-    e.stopPropagation(); // Ngăn sự kiện lan đến thẻ broad
+    e.stopPropagation();
     setSelectedBoard(board);
     setValue("broadName", board.broadName);
     setValue("description", board.description);
@@ -64,37 +115,60 @@ export default function BoardPage() {
   };
 
   const handleDeleteBoard = async (boardId: string, e: React.MouseEvent) => {
-    e.stopPropagation(); // Ngăn sự kiện lan đến thẻ broad
+    e.stopPropagation();
     if (!window.confirm("Bạn có chắc chắn muốn xóa board này?")) return;
 
+    const token = localStorage.getItem("token");
+    if (!token) return navigate("/login");
+
     try {
-      await axios.delete(`http://localhost:3000/broad/delete/${boardId}`);
+      await axios.delete(`http://localhost:3000/broad/delete/${boardId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       setBoards(boards.filter((board) => board._id !== boardId));
       alert("Xóa board thành công!");
     } catch (error) {
       console.error("Lỗi khi xóa board:", error);
-      alert("Xóa board thất bại! Vui lòng kiểm tra console để biết chi tiết.");
+      if (!handleAuthError(error)) {
+        alert("Xóa board thất bại! Vui lòng kiểm tra console để biết chi tiết.");
+      }
     }
   };
 
   const onCreateSubmit = async (data: BoardFormInputs) => {
     try {
       const token = localStorage.getItem("token");
-      if (!token) throw new Error("Không tìm thấy token xác thực");
+      if (!token) {
+        navigate("/login");
+        return;
+      }
 
       const apiData = {
         broadName: data.broadName,
         description: data.description,
       };
+
       const res = await axios.post("http://localhost:3000/broad/create", apiData, {
         headers: { Authorization: `Bearer ${token}` },
       });
+
+      // ✅ FIX: OPTIMISTIC UI UPDATE
+      const newBoard = res.data.data;
+      if (newBoard && newBoard._id) {
+        // Thêm Board mới vào đầu danh sách (để hiển thị ngay)
+        setBoards(prevBoards => [newBoard, ...prevBoards]);
+      }
+
+      // ❌ LOẠI BỎ: Không cần gọi await fetchBoards() nếu đã cập nhật state trực tiếp
+
       console.log("Phản hồi từ API:", res.data);
       alert("Thêm board thành công!");
       setIsCreateModalOpen(false);
       reset();
-      await fetchBoards();
+
     } catch (error) {
+      if (handleAuthError(error)) return;
+
       if (axios.isAxiosError(error)) {
         console.error("Lỗi chi tiết:", error.response?.data);
         alert(`Lỗi: ${error.response?.data?.message || error.message}`);
@@ -108,22 +182,33 @@ export default function BoardPage() {
   const onEditSubmit = async (data: BoardFormInputs) => {
     try {
       const token = localStorage.getItem("token");
-      if (!token || !selectedBoard) throw new Error("Không tìm thấy token hoặc board");
+      if (!token || !selectedBoard) {
+        navigate("/login");
+        return;
+      }
 
       const apiData = {
         broadName: data.broadName,
         description: data.description,
       };
+
       const res = await axios.put(`http://localhost:3000/broad/update/${selectedBoard._id}`, apiData, {
         headers: { Authorization: `Bearer ${token}` },
       });
+
+      // Cập nhật state Boards với dữ liệu mới
+      setBoards(prevBoards => prevBoards.map(board =>
+        board._id === selectedBoard._id ? { ...board, ...res.data.data } : board
+      ));
+
       console.log("Phản hồi từ API khi sửa:", res.data);
       alert("Cập nhật board thành công!");
       setIsEditModalOpen(false);
       reset();
       setSelectedBoard(null);
-      await fetchBoards();
     } catch (error) {
+      if (handleAuthError(error)) return;
+
       if (axios.isAxiosError(error)) {
         console.error("Lỗi chi tiết:", error.response?.data);
         alert(`Lỗi: ${error.response?.data?.message || error.message}`);
@@ -165,7 +250,9 @@ export default function BoardPage() {
               <span className="text-white/80 text-xs font-medium">{boards.length} Projects</span>
             </div>
             <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-indigo-500 rounded-xl flex items-center justify-center shadow-lg hover:scale-105 transition-transform">
-              <span className="text-white font-bold text-sm">U</span>
+              <span className="text-white font-bold text-sm">
+                {currentUser?.name?.[0]?.toUpperCase() || "U"}
+              </span>
             </div>
           </div>
         </div>

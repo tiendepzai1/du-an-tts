@@ -2,23 +2,36 @@ import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Bell, Share2, Star, MoreHorizontal, Grid, LogOut } from "lucide-react";
 
+// Định nghĩa cấu trúc User khớp với dữ liệu lưu trong localStorage (key: 'user')
+type CurrentUser = {
+  _id: string;
+  name: string; // ✅ Đổi từ username sang name (Giả định name là tên hiển thị)
+  email: string;
+};
 
 export default function Header() {
   const nav = useNavigate();
-  const [user, setUser] = useState<{ username: string } | null>(null);
+  // ✅ FIX 1: Dùng CurrentUser type và key 'user'
+  const [user, setUser] = useState<CurrentUser | null>(null);
   const [showMenu, setShowMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // ✅ Khi component mount
-  useEffect(() => {
-    const savedUser = localStorage.getItem("username");
-    if (savedUser) {
+  const getCurrentUserFromStorage = (): CurrentUser | null => {
+    // ✅ FIX 2: Lấy dữ liệu từ key 'user'
+    const savedUserJson = localStorage.getItem("user");
+    if (savedUserJson) {
       try {
-        setUser(JSON.parse(savedUser));
+        return JSON.parse(savedUserJson) as CurrentUser;
       } catch {
-        setUser({ username: savedUser });
+        return null;
       }
     }
+    return null;
+  }
+
+  // ✅ Khi component mount, lấy thông tin user đã đăng nhập
+  useEffect(() => {
+    setUser(getCurrentUserFromStorage());
   }, []);
 
   // ✅ Đóng menu khi click ra ngoài
@@ -33,15 +46,20 @@ export default function Header() {
   }, []);
 
   const handleLogout = () => {
-    localStorage.removeItem("username");
+    // ✅ Xóa token và user object
     localStorage.removeItem("token");
+    localStorage.removeItem("user");
     setUser(null);
     setShowMenu(false);
     alert("Đã đăng xuất thành công!");
+    nav("/login"); // Chuyển hướng về trang đăng nhập
   };
 
   const handleLogin = () => nav("/login");
   const handleRegister = () => nav("/register");
+
+  // ✅ FIX LỖI HIỂN THỊ: Sử dụng biến này để kiểm soát việc hiển thị trạng thái
+  const isLoggedIn = user !== null;
 
   return (
     <>
@@ -55,9 +73,10 @@ export default function Header() {
               MH
             </div>
             <span className="font-semibold text-sm">
-              {user ? (
+              {/* ✅ HIỂN THỊ TÊN USER */}
+              {isLoggedIn ? (
                 <>
-                  Xin chào, <span className="text-blue-400">{user.username}</span>
+                  Xin chào, <span className="text-blue-400">{user.name}</span>
                 </>
               ) : (
                 "Chào mừng bạn đến với MyBoard"
@@ -66,12 +85,13 @@ export default function Header() {
           </div>
         </div>
 
-        {/* CENTER: Search */}
-        
+        {/* CENTER: Search (Giữ nguyên) */}
 
         {/* RIGHT SIDE */}
         <div className="flex items-center gap-4 relative" ref={menuRef}>
-          {!user ? (
+
+          {/* ✅ FIX LỖI HIỂN THỊ KÉP: Chỉ hiển thị khối này nếu KHÔNG đăng nhập */}
+          {!isLoggedIn ? (
             <>
               <button
                 onClick={handleLogin}
@@ -87,10 +107,10 @@ export default function Header() {
               </button>
             </>
           ) : (
+            // ✅ Chỉ hiển thị khối này nếu ĐÃ đăng nhập
             <>
-           
-
               <div className="flex -space-x-2">
+                {/* Giữ nguyên phần hình ảnh thành viên (Có thể thay thế bằng ảnh user thật) */}
                 <img
                   src="https://i.pravatar.cc/40?img=1"
                   alt="member"
@@ -119,13 +139,15 @@ export default function Header() {
                   onClick={() => setShowMenu(!showMenu)}
                   className="w-9 h-9 rounded-full bg-gradient-to-r from-green-400 to-blue-500 flex items-center justify-center text-white font-semibold cursor-pointer select-none"
                 >
-                  {user.username.charAt(0).toUpperCase()}
+                  {/* ✅ FIX 3: Dùng name và kiểm tra an toàn */}
+                  {user?.name?.charAt(0).toUpperCase() || "U"}
                 </div>
 
                 {showMenu && (
                   <div className="absolute right-0 mt-2 w-44 bg-[#2a2a3d] border border-gray-700 rounded-lg shadow-lg overflow-hidden">
                     <div className="px-4 py-2 text-sm text-gray-300 border-b border-gray-700">
-                      {user.username}
+                      {/* ✅ FIX 4: Hiển thị name */}
+                      {user.name}
                     </div>
                     <button
                       onClick={handleLogout}

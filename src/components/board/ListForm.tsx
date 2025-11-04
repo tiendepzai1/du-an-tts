@@ -29,7 +29,8 @@ export const ListForm = ({ onSubmit, editingList, onCancel }: ListFormProps) => 
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* ✅ FIX 1: Đã thay đổi layout về grid-cols-1 vì chỉ còn 1 trường */}
+          <div className="grid grid-cols-1 gap-4">
             <div>
               <label className="block text-white font-semibold mb-2 text-sm">Tên danh sách</label>
               <input
@@ -47,17 +48,7 @@ export const ListForm = ({ onSubmit, editingList, onCancel }: ListFormProps) => 
               )}
             </div>
 
-            <div>
-              <label className="block text-white font-semibold mb-2 text-sm">Trạng thái</label>
-              <select
-                {...register("status")}
-                className="w-full border-2 border-white/20 bg-white/10 backdrop-blur-sm rounded-xl px-3 py-2 text-white focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-300 text-sm"
-              >
-                <option value="việc cần làm" className="bg-gray-800">Việc cần làm</option>
-                <option value="đang thực hiện" className="bg-gray-800">Đang thực hiện</option>
-                <option value="đã xong" className="bg-gray-800">Đã xong</option>
-              </select>
-            </div>
+            {/* ❌ ĐÃ XÓA TRƯỜNG TRẠNG THÁI */}
           </div>
 
           <div>

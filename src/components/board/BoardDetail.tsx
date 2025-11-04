@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"; // Thêm useEffect
+import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { BoardHeader } from "./BoardHeader";
 import { BoardDescription } from "./BoardDescription";
@@ -8,11 +8,19 @@ import KanbanBoard from "./KanbanBoard";
 import { useBoard } from "../hooks/useBoard";
 import { useComments } from "../hooks/useComments";
 import { useCurrentUser } from "../hooks/useCurrentUser";
-import type { ListType, Card } from "./types";
+import type { ListType, Card, ListFormInputs } from "./types"; // Added ListFormInputs
 
 export default function BoardDetail() {
   const { id } = useParams<{ id: string }>();
-  const { board, loading: boardLoading, handleDragEnd, handleAddList, handleDeleteList, handleEditCard, handleDeleteCard } = useBoard(id);
+  const {
+    board,
+    loading: boardLoading,
+    handleDragEnd,
+    handleAddList,
+    handleDeleteList,
+    handleEditCard, // Hàm logic chính cho Card CRUD
+    handleDeleteCard
+  } = useBoard(id);
   const {
     comments,
     commentLoading,
@@ -25,8 +33,10 @@ export default function BoardDetail() {
     setCommentError,
   } = useComments();
   const { currentUser, loading: userLoading, error: userError } = useCurrentUser();
+
   const [editingList, setEditingList] = useState<ListType | null>(null);
-  const [showForm, setShowForm] = useState(false);
+  const [showListForm, setShowListForm] = useState(false);
+
   const [addingCardListId, setAddingCardListId] = useState<string | null>(null);
   const [editingCard, setEditingCard] = useState<Card | null>(null);
   const [editingCardListId, setEditingCardListId] = useState<string | null>(null);
@@ -34,7 +44,7 @@ export default function BoardDetail() {
   const [showCommentModal, setShowCommentModal] = useState(false);
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
 
-  // Debug
+  // Debug: Giữ nguyên
   useEffect(() => {
     console.log("currentUser:", currentUser, "userLoading:", userLoading, "userError:", userError);
   }, [currentUser, userLoading, userError]);
@@ -47,26 +57,41 @@ export default function BoardDetail() {
 
   const handleEditList = (list: ListType) => {
     setEditingList(list);
-    setShowForm(true);
+    setShowListForm(true);
   };
 
-  const handleAddCard = (listId: string) => {
-    if (listId === "new") {
-      setShowForm(true);
-      setEditingList(null);
-    } else {
-      setAddingCardListId(listId);
-      setEditingCard(null);
-      setEditingCardListId(null);
-    }
+  // ✅ NEW: Hàm xử lý submit List Form
+  const handleListSubmit = (data: ListFormInputs, listToEdit: ListType | null) => {
+    handleAddList(data, listToEdit);
+    setEditingList(null);
+    setShowListForm(false);
   };
 
-  const handleEditCardLocal = (listId: string, card: Card | null) => {
+  // ✅ NEW: Hàm mở form thêm Card (creation)
+  const handleOpenAddCardForm = (listId: string) => {
+    setAddingCardListId(listId);
+    setEditingCard(null); // Luôn reset editingCard cho chế độ tạo
+    setEditingCardListId(null);
+  };
+
+  // ✅ NEW: Hàm khởi tạo chế độ sửa Card (gọi từ List.tsx)
+  const handleEditCardInitiate = (card: Card, listId: string) => {
+    setEditingCard(card);
+    setEditingCardListId(listId);
+    setAddingCardListId(listId); // Mở form thêm Card trong List này
+  };
+
+  // ✅ Hàm xử lý việc submit Card (cả tạo và sửa) và reset state form
+  const handleCardSubmitAndReset = (listId: string, card: Card | null) => {
+    // Gọi hook logic chính
     handleEditCard(listId, card, editingCard, editingCardListId, addingCardListId);
+
+    // Reset trạng thái sau khi submit để đóng form
     setEditingCard(null);
     setEditingCardListId(null);
     setAddingCardListId(null);
   };
+
 
   if (boardLoading || userLoading) return <p className="p-6">Đang tải dữ liệu...</p>;
   if (!board) return <p className="p-6 text-red-500">Không tìm thấy board!</p>;
@@ -83,10 +108,11 @@ export default function BoardDetail() {
       <BoardHeader board={board} currentUser={currentUser} />
       <main className="relative p-4">
         <BoardDescription description={board.description} />
-        {!showForm && !editingList && (
+        {/* Nút Thêm danh sách mới */}
+        {!showListForm && !editingList && (
           <div className="mb-4">
             <button
-              onClick={() => handleAddCard("new")}
+              onClick={() => setShowListForm(true)} // Mở form List
               className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:via-indigo-500 hover:to-purple-500 text-white font-bold py-2 px-4 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 flex items-center space-x-2 backdrop-blur-xl border border-white/20 text-sm"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -96,17 +122,14 @@ export default function BoardDetail() {
             </button>
           </div>
         )}
-        {(showForm || editingList) && (
+        {/* Form List */}
+        {(showListForm || editingList) && (
           <ListForm
-            onSubmit={(data) => {
-              handleAddList(data, editingList);
-              setEditingList(null);
-              setShowForm(false);
-            }}
+            onSubmit={(data) => handleListSubmit(data, editingList)}
             editingList={editingList}
             onCancel={() => {
               setEditingList(null);
-              setShowForm(false);
+              setShowListForm(false);
             }}
           />
         )}
@@ -131,17 +154,19 @@ export default function BoardDetail() {
             setEditingCommentId={setEditingCommentId}
           />
         )}
+        {/* Kanban Board */}
         <KanbanBoard
           board={board}
           currentUser={currentUser}
           onDragEnd={handleDragEnd}
           onEditList={handleEditList}
           onDeleteList={handleDeleteList}
-          onAddCard={handleAddCard}
+          onAddCard={handleOpenAddCardForm} // ✅ Dùng hàm mới cho Card Creation
           editingCard={editingCard}
           editingCardListId={editingCardListId}
           addingCardListId={addingCardListId}
-          onEditCard={handleEditCardLocal}
+          onEditCard={handleCardSubmitAndReset} // ✅ Xử lý Card Submit (Create/Update)
+          onEditCardInitiate={handleEditCardInitiate} // ✅ NEW PROP: Khởi tạo sửa Card
           onDeleteCard={handleDeleteCard}
           onCardClick={handleCardClick}
         />

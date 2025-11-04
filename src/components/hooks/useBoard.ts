@@ -6,21 +6,36 @@ export const useBoard = (id: string | undefined) => {
   const [board, setBoard] = useState<Board | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // 💡 HÀM TIỆN ÍCH LẤY CONFIG XÁC THỰC
+  const getAuthConfig = () => {
+    const token = localStorage.getItem("token");
+    if (!token) return null;
+    return { headers: { Authorization: `Bearer ${token}` } };
+  };
+
+
   // 🔹 Load board lần đầu
   const fetchBoard = async () => {
     if (!id) return;
+    const config = getAuthConfig();
+    if (!config) return;
+
     try {
       setLoading(true);
-      const boardRes = await axios.get(`http://localhost:3000/broad/detail/${id}`);
-      const listRes = await axios.get(`http://localhost:3000/list/broad/${id}`);
+      // ✅ FIX 1: Thêm config xác thực cho GET Board Detail
+      const boardRes = await axios.get(`http://localhost:3000/broad/detail/${id}`, config);
+      // ✅ FIX 2: Thêm config xác thực cho GET List
+      const listRes = await axios.get(`http://localhost:3000/list/broad/${id}`, config);
+
       setBoard({
         _id: id,
         broadName: boardRes.data.data?.broadName || "Tên Board",
         description: boardRes.data.data?.description || "Chưa có mô tả",
         ownerList: listRes.data.data || [],
       });
-    } catch (err) {
+    } catch (err: any) {
       console.error("❌ Lỗi khi tải dữ liệu:", err);
+      // Có thể thêm logic chuyển hướng nếu gặp lỗi 401/403
     } finally {
       setLoading(false);
     }
@@ -32,6 +47,9 @@ export const useBoard = (id: string | undefined) => {
     if (!destination || !board) return;
     if (destination.droppableId === source.droppableId && destination.index === source.index) return;
 
+    const config = getAuthConfig();
+    if (!config) return;
+
     const sourceList = board.ownerList.find((l) => l._id === source.droppableId);
     const destList = board.ownerList.find((l) => l._id === destination.droppableId);
     if (!sourceList || !destList) return;
@@ -42,7 +60,7 @@ export const useBoard = (id: string | undefined) => {
     const [movedCard] = sourceCards.splice(source.index, 1);
     destCards.splice(destination.index, 0, movedCard);
 
-    // Cập nhật state trực tiếp
+    // Cập nhật state trực tiếp (giữ nguyên)
     setBoard((prev) => {
       if (!prev) return prev;
       return {
@@ -57,17 +75,20 @@ export const useBoard = (id: string | undefined) => {
 
     // Gọi backend
     try {
+      // ✅ FIX 3: Thêm config xác thực cho PUT List Update (dest)
       await axios.put(`http://localhost:3000/list/update/${destList._id}`, {
         ownerCard: destCards.map((c) => c._id),
         listName: destList.listName,
         ownerBroad: board._id,
-      });
+      }, config);
+
       if (source.droppableId !== destination.droppableId) {
+        // ✅ FIX 4: Thêm config xác thực cho PUT List Update (source)
         await axios.put(`http://localhost:3000/list/update/${sourceList._id}`, {
           ownerCard: sourceCards.map((c) => c._id),
           listName: sourceList.listName,
           ownerBroad: board._id,
-        });
+        }, config);
       }
     } catch (err) {
       console.error("❌ Lỗi khi cập nhật backend:", err);
@@ -75,15 +96,23 @@ export const useBoard = (id: string | undefined) => {
   };
 
   // 🔹 Thêm hoặc sửa list
-  const handleAddList = async (data: { listName: string; description: string; status: string }, editingList: ListType | null) => {
+  // ✅ FIX 5: Đảm bảo chỉ gửi listName và description (đã loại bỏ status)
+  const handleAddList = async (data: { listName: string; description: string; }, editingList: ListType | null) => {
     if (!id) return;
 
+    const config = getAuthConfig();
+    if (!config) return;
+
     try {
+      const payload = { listName: data.listName, description: data.description, ownerBroad: id };
+
       if (editingList) {
-        await axios.put(`http://localhost:3000/list/update/${editingList._id}`, { ...data, ownerBroad: id });
-        setBoard((prev) => prev ? { ...prev, ownerList: prev.ownerList.map(l => l._id === editingList._id ? { ...l, ...data } : l) } : prev);
+        // ✅ FIX 6: Thêm config xác thực cho PUT List Update (Sửa)
+        await axios.put(`http://localhost:3000/list/update/${editingList._id}`, payload, config);
+        setBoard((prev) => prev ? { ...prev, ownerList: prev.ownerList.map(l => l._id === editingList._id ? { ...l, ...payload } : l) } : prev);
       } else {
-        const res = await axios.post(`http://localhost:3000/list/create`, { ...data, ownerBroad: id });
+        // ✅ FIX 7: Thêm config xác thực cho POST List Create (Tạo)
+        const res = await axios.post(`http://localhost:3000/list/create`, payload, config);
         setBoard((prev) => prev ? { ...prev, ownerList: [...prev.ownerList, res.data.data] } : prev);
       }
     } catch (err: any) {
@@ -95,8 +124,13 @@ export const useBoard = (id: string | undefined) => {
   // 🔹 Xóa list
   const handleDeleteList = async (listId: string) => {
     if (!confirm("Bạn có chắc muốn xóa list này?")) return;
+
+    const config = getAuthConfig();
+    if (!config) return;
+
     try {
-      await axios.delete(`http://localhost:3000/list/delete/${listId}`);
+      // ✅ FIX 8: Thêm config xác thực cho DELETE List
+      await axios.delete(`http://localhost:3000/list/delete/${listId}`, config);
       setBoard((prev) => prev ? { ...prev, ownerList: prev.ownerList.filter(l => l._id !== listId) } : prev);
     } catch (err) {
       console.error("❌ Lỗi khi xóa list:", err);
@@ -114,14 +148,23 @@ export const useBoard = (id: string | undefined) => {
   ) => {
     if (!card) return;
 
+    const config = getAuthConfig();
+    if (!config) return; // ❌ Dừng nếu không có config
+
     try {
+      // Tạo payload chung (sử dụng status/dueDate string từ FE)
+      const payload = {
+        cardName: card.cardName,
+        description: card.description || "",
+        status: card.status,
+        dueDate: card.dueDate,
+        ownerLists: [editingCardListId || addingCardListId || listId],
+      };
+
       // Edit card
       if (editingCard && editingCard._id && editingCardListId) {
-        await axios.put(`http://localhost:3000/card/update/${editingCard._id}`, {
-          cardName: card.cardName,
-          description: card.description || "",
-          ownerLists: [editingCardListId],
-        });
+        // ✅ FIX 9: Gửi payload đầy đủ
+        await axios.put(`http://localhost:3000/card/update/${editingCard._id}`, payload, config);
 
         setBoard((prev) => prev ? {
           ...prev,
@@ -130,16 +173,14 @@ export const useBoard = (id: string | undefined) => {
             ownerCard: l.ownerCard?.map(c => c._id === editingCard._id ? { ...c, ...card } : c)
           } : l)
         } : prev);
-      } 
+      }
       // Create card
       else {
         const targetListId = addingCardListId || listId;
         if (!targetListId) return;
-        const res = await axios.post("http://localhost:3000/card/create", {
-          cardName: card.cardName,
-          description: card.description || "",
-          ownerLists: [targetListId],
-        });
+
+        // ✅ FIX 10: Gửi payload đầy đủ
+        const res = await axios.post("http://localhost:3000/card/create", payload, config);
 
         setBoard((prev) => prev ? {
           ...prev,
@@ -158,8 +199,13 @@ export const useBoard = (id: string | undefined) => {
   // 🔹 Xóa card
   const handleDeleteCard = async (cardId: string) => {
     if (!confirm("Bạn có chắc muốn xóa thẻ này?")) return;
+
+    const config = getAuthConfig();
+    if (!config) return;
+
     try {
-      await axios.delete(`http://localhost:3000/card/delete/${cardId}`);
+      // ✅ FIX 11: Thêm config xác thực cho DELETE Card
+      await axios.delete(`http://localhost:3000/card/delete/${cardId}`, config);
       setBoard((prev) => prev ? {
         ...prev,
         ownerList: prev.ownerList.map(l => ({

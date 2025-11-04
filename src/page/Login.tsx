@@ -12,14 +12,66 @@ const axiosClient = axios.create({
   },
 });
 
-// Interceptor: tự động thêm Authorization header nếu có token
-axiosClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token");
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+// =========================================================
+// ✅ PHẦN LOGGING API CHI TIẾT
+// =========================================================
+
+// Interceptor YÊU CẦU: Thêm Authorization header và Log Request
+axiosClient.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem("token");
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+
+    console.groupCollapsed(`[API Request] ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`);
+    console.log("Headers:", config.headers);
+    try {
+      if (config.data) {
+        console.log("Data:", JSON.parse(config.data));
+      } else {
+        console.log("Data:", config.params);
+      }
+    } catch (e) {
+      console.log("Data:", config.data);
+    }
+    console.groupEnd();
+
+    return config;
+  },
+  (error) => {
+    console.error("[API Request Error] Request failed to send:", error);
+    return Promise.reject(error);
   }
-  return config;
-});
+);
+
+// Interceptor PHẢN HỒI: Log Response (Success & Error)
+axiosClient.interceptors.response.use(
+  (response) => {
+    console.groupCollapsed(`%c[API Success] ${response.config.method?.toUpperCase()} ${response.config.baseURL}${response.config.url} (Status: ${response.status})`, 'color: green; font-weight: bold;');
+    console.log("Response Data:", response.data);
+    console.groupEnd();
+    return response;
+  },
+  (error) => {
+    if (axios.isAxiosError(error) && error.response) {
+      const { config, response } = error;
+      const url = `${config.baseURL}${config.url}`;
+      const method = config.method?.toUpperCase();
+
+      console.groupCollapsed(`%c[API Error] ${method} ${url} (Status: ${response.status})`, 'color: red; font-weight: bold;');
+      console.log("Error Status:", response.status);
+      console.log("Error Message:", response.data.message || response.statusText);
+      console.log("Full Error Response:", response);
+      console.groupEnd();
+    } else {
+      console.error("[Non-API Error] Network or Connection Error:", error);
+    }
+    return Promise.reject(error);
+  }
+);
+// =========================================================
+
 
 export const Login = () => {
   const nav = useNavigate();
@@ -32,31 +84,28 @@ export const Login = () => {
     resolver: zodResolver(authSchema),
   });
 
-const onSubmit = async (data: IAuth) => {
-  try {
-    const res = await axiosClient.post("/user/login", {
-      email: data.email,
-      password: data.password,
-    });
+  const onSubmit = async (data: IAuth) => {
+    try {
+      // ✅ CHỈ GỬI EMAIL VÀ PASSWORD
+      const res = await axiosClient.post("/user/login", {
+        email: data.email,
+        password: data.password,
+      });
 
-    console.log("Phản hồi từ backend:", res.data);
+      // ✅ LƯU TOKEN VÀ USER OBJECT
+      localStorage.setItem("token", res.data.token);
+      localStorage.setItem("user", JSON.stringify(res.data.data));
 
-    localStorage.setItem("token", res.data.token);
-    console.log("Token saved:", res.data.token);
-
-    alert("Đăng nhập thành công!");
-    console.log("Navigating to /broad");
-    nav("/broad"); // Chuyển hướng tới /broad
-  } catch (error: any) {
-    if (error.response) {
-      console.error("Lỗi từ backend:", error.response.data);
-      alert(error.response.data.message || "Đăng nhập thất bại!");
-    } else {
-      console.error("Lỗi kết nối:", error);
-      alert("Lỗi kết nối đến server!");
+      alert("Đăng nhập thành công!");
+      nav("/broad"); // Chuyển hướng tới /broad
+    } catch (error: any) {
+      if (error.response) {
+        alert(error.response.data.message || "Đăng nhập thất bại!");
+      } else {
+        alert("Lỗi kết nối đến server hoặc lỗi không xác định!");
+      }
     }
-  }
-};
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 relative overflow-hidden flex items-center justify-center p-4">
@@ -99,44 +148,6 @@ const onSubmit = async (data: IAuth) => {
           onSubmit={handleSubmit(onSubmit)}
           className="bg-white/10 backdrop-blur-2xl p-6 rounded-2xl shadow-2xl border border-white/20"
         >
-          {/* Username */}
-          <div className="mb-6">
-            <label className="block text-white font-bold mb-3 text-sm">
-              Username
-            </label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                <svg
-                  className="w-5 h-5 text-white/60"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                  />
-                </svg>
-              </div>
-              <input
-                type="text"
-                {...register("username")}
-                placeholder="Nhập tên đăng nhập..."
-                className={`w-full pl-12 pr-4 py-3 border-2 ${errors?.username
-                    ? "border-red-400/50 bg-red-500/10"
-                    : "border-white/20 bg-white/10 hover:bg-white/15"
-                  } rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-300 text-sm text-white placeholder-white/50 backdrop-blur-sm`}
-              />
-            </div>
-            {errors?.username && (
-              <p className="mt-2 text-red-300 text-xs flex items-center">
-                {errors.username.message}
-              </p>
-            )}
-          </div>
-
           {/* Email */}
           <div className="mb-8">
             <label className="block text-white font-bold mb-4 text-lg">
@@ -163,8 +174,8 @@ const onSubmit = async (data: IAuth) => {
                 {...register("email")}
                 placeholder="Nhập email của bạn..."
                 className={`w-full pl-16 pr-6 py-5 border-2 ${errors?.email
-                    ? "border-red-400/50 bg-red-500/10"
-                    : "border-white/20 bg-white/10 hover:bg-white/15"
+                  ? "border-red-400/50 bg-red-500/10"
+                  : "border-white/20 bg-white/10 hover:bg-white/15"
                   } rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-300 text-xl text-white placeholder-white/50 backdrop-blur-sm`}
               />
             </div>
@@ -201,8 +212,8 @@ const onSubmit = async (data: IAuth) => {
                 {...register("password")}
                 placeholder="••••••••"
                 className={`w-full pl-16 pr-6 py-5 border-2 ${errors?.password
-                    ? "border-red-400/50 bg-red-500/10"
-                    : "border-white/20 bg-white/10 hover:bg-white/15"
+                  ? "border-red-400/50 bg-red-500/10"
+                  : "border-white/20 bg-white/10 hover:bg-white/15"
                   } rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-300 text-xl text-white placeholder-white/50 backdrop-blur-sm`}
               />
             </div>
