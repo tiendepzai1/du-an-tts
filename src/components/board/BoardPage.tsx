@@ -1,8 +1,11 @@
-import { Plus, ArrowUpRight, Edit, Trash2 } from "lucide-react";
+import { Plus, ArrowUpRight, Edit, Trash2, Lock, Users } from "lucide-react";
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useForm } from "react-hook-form";
+// ✅ IMPORT COMPONENT ĐÃ ĐƯỢC GIẢI QUYẾT LỖI
+import InvitationsDropdown from "./InvitationsDropdown.tsx";
+
 
 // Helper type cho Current User (Dựa trên dữ liệu lưu trong localStorage)
 type CurrentUser = {
@@ -17,6 +20,8 @@ type Board = {
   description: string;
   createdAt: string;
   updatedAt: string;
+  owner: string; // ID của người sở hữu
+  members: string[]; // Mảng ID của các thành viên
   ownerList?: any[];
   ownerUser?: any[];
 };
@@ -56,6 +61,11 @@ export default function BoardPage() {
     setValue,
   } = useForm<BoardFormInputs>();
 
+  // ✅ HÀM TIỆN ÍCH: Kiểm tra xem người dùng hiện tại có phải là Owner không
+  const isOwner = useCallback((board: Board) => {
+    return currentUser && board.owner === currentUser._id;
+  }, [currentUser]);
+
   const handleAuthError = (error: any) => {
     if (axios.isAxiosError(error) && error.response?.status === 401) {
       alert("Phiên đăng nhập hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.");
@@ -67,6 +77,19 @@ export default function BoardPage() {
     return false;
   };
 
+  // ✅ HÀM XỬ LÝ TOAST (thông báo toàn cục)
+  // Hàm này cũng gọi fetchBoards() để tải lại danh sách board sau khi chấp nhận lời mời
+  const handleGlobalSuccess = (message: string) => {
+    alert(`SUCCESS: ${message}`);
+    // Sau khi chấp nhận lời mời, cần refresh danh sách board
+    fetchBoards();
+  };
+
+  // ✅ HÀM XỬ LÝ TOAST (lỗi toàn cục)
+  const handleGlobalError = (message: string) => {
+    alert(`ERROR: ${message}`);
+  };
+
   const fetchBoards = useCallback(async () => {
     const token = localStorage.getItem("token");
     if (!token) {
@@ -76,11 +99,13 @@ export default function BoardPage() {
 
     try {
       setIsLoading(true);
+      // API ListBroad đã được sửa để trả về cả board owner và member
       const response = await axios.get("http://localhost:3000/broad/list", {
         headers: { Authorization: `Bearer ${token}` },
       });
 
       if (response.data.data) {
+        // Board data giờ bao gồm owner và members
         setBoards(response.data.data);
       } else {
         setBoards([]);
@@ -94,13 +119,12 @@ export default function BoardPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [navigate]); // navigate là dependency của useCallback
+  }, [navigate]);
 
   useEffect(() => {
     setCurrentUser(getCurrentUser());
     fetchBoards();
-  }, [fetchBoards]); // ✅ FIX: Hàm ổn định (useCallback) -> đảm bảo fetchBoards được gọi lại sau khi tải lại trang
-
+  }, [fetchBoards]);
 
   const handleBoardClick = (boardId: string) => {
     navigate(`/detail/${boardId}`);
@@ -108,32 +132,44 @@ export default function BoardPage() {
 
   const handleEditBoard = (board: Board, e: React.MouseEvent) => {
     e.stopPropagation();
+    // Chỉ cho phép Owner sửa
+    if (!isOwner(board)) {
+      alert("Bạn chỉ có thể sửa các board do bạn sở hữu.");
+      return;
+    }
     setSelectedBoard(board);
     setValue("broadName", board.broadName);
     setValue("description", board.description);
     setIsEditModalOpen(true);
   };
 
-  const handleDeleteBoard = async (boardId: string, e: React.MouseEvent) => {
+  const handleDeleteBoard = async (board: Board, e: React.MouseEvent) => {
     e.stopPropagation();
+    // Chỉ cho phép Owner xóa
+    if (!isOwner(board)) {
+      alert("Bạn chỉ có thể xóa các board do bạn sở hữu.");
+      return;
+    }
     if (!window.confirm("Bạn có chắc chắn muốn xóa board này?")) return;
 
     const token = localStorage.getItem("token");
     if (!token) return navigate("/login");
 
     try {
-      await axios.delete(`http://localhost:3000/broad/delete/${boardId}`, {
+      await axios.delete(`http://localhost:3000/broad/delete/${board._id}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      setBoards(boards.filter((board) => board._id !== boardId));
-      alert("Xóa board thành công!");
+      setBoards(boards.filter((b) => b._id !== board._id));
+      handleGlobalSuccess("Xóa board thành công!");
     } catch (error) {
       console.error("Lỗi khi xóa board:", error);
       if (!handleAuthError(error)) {
-        alert("Xóa board thất bại! Vui lòng kiểm tra console để biết chi tiết.");
+        handleGlobalError("Xóa board thất bại! Vui lòng kiểm tra console để biết chi tiết.");
       }
     }
   };
+
+  // ... (Giữ nguyên onCreateSubmit và onEditSubmit)
 
   const onCreateSubmit = async (data: BoardFormInputs) => {
     try {
@@ -152,17 +188,17 @@ export default function BoardPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      // ✅ FIX: OPTIMISTIC UI UPDATE
+      // Cập nhật state Boards với dữ liệu mới
       const newBoard = res.data.data;
       if (newBoard && newBoard._id) {
-        // Thêm Board mới vào đầu danh sách (để hiển thị ngay)
-        setBoards(prevBoards => [newBoard, ...prevBoards]);
+        // Thêm Owner ID và Members vào board mới tạo cho hiển thị local
+        newBoard.owner = currentUser?._id;
+        newBoard.members = [];
+        setBoards(prevBoards => [newBoard as Board, ...prevBoards]);
       }
 
-      // ❌ LOẠI BỎ: Không cần gọi await fetchBoards() nếu đã cập nhật state trực tiếp
-
       console.log("Phản hồi từ API:", res.data);
-      alert("Thêm board thành công!");
+      handleGlobalSuccess("Thêm board thành công!");
       setIsCreateModalOpen(false);
       reset();
 
@@ -171,10 +207,10 @@ export default function BoardPage() {
 
       if (axios.isAxiosError(error)) {
         console.error("Lỗi chi tiết:", error.response?.data);
-        alert(`Lỗi: ${error.response?.data?.message || error.message}`);
+        handleGlobalError(`Lỗi: ${error.response?.data?.message || error.message}`);
       } else {
         console.error("Lỗi không xác định:", error);
-        alert("Lỗi không xác định khi thêm board");
+        handleGlobalError("Lỗi không xác định khi thêm board");
       }
     }
   };
@@ -198,11 +234,16 @@ export default function BoardPage() {
 
       // Cập nhật state Boards với dữ liệu mới
       setBoards(prevBoards => prevBoards.map(board =>
-        board._id === selectedBoard._id ? { ...board, ...res.data.data } : board
+        board._id === selectedBoard._id ? {
+          ...board,
+          ...res.data.data,
+          owner: board.owner,
+          members: board.members,
+        } : board
       ));
 
       console.log("Phản hồi từ API khi sửa:", res.data);
-      alert("Cập nhật board thành công!");
+      handleGlobalSuccess("Cập nhật board thành công!");
       setIsEditModalOpen(false);
       reset();
       setSelectedBoard(null);
@@ -211,10 +252,10 @@ export default function BoardPage() {
 
       if (axios.isAxiosError(error)) {
         console.error("Lỗi chi tiết:", error.response?.data);
-        alert(`Lỗi: ${error.response?.data?.message || error.message}`);
+        handleGlobalError(`Lỗi: ${error.response?.data?.message || error.message}`);
       } else {
         console.error("Lỗi không xác định:", error);
-        alert("Lỗi không xác định khi sửa board");
+        handleGlobalError("Lỗi không xác định khi sửa board");
       }
     }
   };
@@ -246,6 +287,9 @@ export default function BoardPage() {
             </div>
           </div>
           <div className="flex items-center space-x-3">
+            {/* ✅ VỊ TRÍ MỚI: Thêm Dropdown Lời mời tại đây */}
+            <InvitationsDropdown onSuccess={handleGlobalSuccess} onError={handleGlobalError} />
+
             <div className="bg-white/10 backdrop-blur-sm rounded-xl px-3 py-1 border border-white/20">
               <span className="text-white/80 text-xs font-medium">{boards.length} Projects</span>
             </div>
@@ -274,85 +318,103 @@ export default function BoardPage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
-              {boards.map((board, index) => (
-                <div
-                  key={board._id}
-                  className="group relative bg-white/10 backdrop-blur-xl rounded-2xl p-4 transition-all duration-300 hover:shadow-2xl hover:scale-105 border border-white/20 hover:border-white/40 overflow-hidden hover:bg-white/15"
-                  style={{ animationDelay: `${index * 100}ms` }}
-                >
+              {boards.map((board, index) => {
+                // Kiểm tra quyền hạn
+                const isCurrentUserOwner = isOwner(board);
+                const isCurrentUserMember = !isCurrentUserOwner && board.members.some(memberId => memberId === currentUser?._id);
+
+                return (
                   <div
-                    className="absolute inset-0 cursor-pointer"
-                    onClick={() => handleBoardClick(board._id)}
+                    key={board._id}
+                    className="group relative bg-white/10 backdrop-blur-xl rounded-2xl p-4 transition-all duration-300 hover:shadow-2xl hover:scale-105 border border-white/20 hover:border-white/40 overflow-hidden hover:bg-white/15"
+                    style={{ animationDelay: `${index * 100}ms` }}
                   >
-                    <div className="absolute inset-0 bg-gradient-to-br from-blue-600/80 via-indigo-600/80 to-purple-700/80 group-hover:from-blue-500 group-hover:via-indigo-500 group-hover:to-purple-600 transition-all duration-300"></div>
-                    <div className="absolute top-4 left-4 w-2 h-2 bg-white/30 rounded-full animate-ping"></div>
-                    <div className="absolute bottom-6 right-6 w-1 h-1 bg-white/40 rounded-full animate-pulse"></div>
-                    <div className="relative z-10 space-y-3 p-4">
-                      <div className="space-y-2">
+                    <div
+                      className="absolute inset-0 cursor-pointer"
+                      onClick={() => handleBoardClick(board._id)}
+                    >
+                      <div className="absolute inset-0 bg-gradient-to-br from-blue-600/80 via-indigo-600/80 to-purple-700/80 group-hover:from-blue-500 group-hover:via-indigo-500 group-hover:to-purple-600 transition-all duration-300"></div>
+                      <div className="absolute top-4 left-4 w-2 h-2 bg-white/30 rounded-full animate-ping"></div>
+                      <div className="absolute bottom-6 right-6 w-1 h-1 bg-white/40 rounded-full animate-pulse"></div>
+                      <div className="relative z-10 space-y-3 p-4">
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div className="w-6 h-6 bg-white/20 backdrop-blur-sm rounded-lg flex items-center justify-center">
+                              {/* HIỂN THỊ ICON DỰA TRÊN QUYỀN HẠN */}
+                              {isCurrentUserOwner ? (
+                                <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                                </svg>
+                              ) : (
+                                <Users className="w-3 h-3 text-white" /> // Icon cho Member
+                              )}
+                            </div>
+                            {/* Hiển thị số lượng thành viên (Owner + Members) */}
+                            <span className="text-white/80 text-xs font-medium">
+                              {1 + board.members.length} Users
+                            </span>
+                          </div>
+                          <h3 className="text-lg font-bold text-white group-hover:text-blue-100 transition-colors mb-1">
+                            {board.broadName}
+                          </h3>
+                          <p className="text-blue-100/80 text-xs leading-relaxed line-clamp-2">
+                            {board.description}
+                          </p>
+                        </div>
+                        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-2 border border-white/20">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-semibold text-white">Progress</span>
+                            <span className="text-xs text-blue-200 bg-white/20 px-1 py-0.5 rounded-lg font-medium">0 Lists</span>
+                          </div>
+                          <div className="space-y-1">
+                            <div className="h-1.5 bg-white/20 rounded-full overflow-hidden">
+                              <div className="h-full bg-gradient-to-r from-blue-400 to-indigo-400 rounded-full w-0 group-hover:w-1/3 transition-all duration-700"></div>
+                            </div>
+                            <div className="h-1 bg-white/20 rounded-full overflow-hidden">
+                              <div className="h-full bg-gradient-to-r from-indigo-400 to-purple-400 rounded-full w-0 group-hover:w-2/3 transition-all duration-700 delay-200"></div>
+                            </div>
+                            <div className="h-1 bg-white/20 rounded-full overflow-hidden">
+                              <div className="h-full bg-gradient-to-r from-purple-400 to-pink-400 rounded-full w-0 group-hover:w-1/4 transition-all duration-700 delay-400"></div>
+                            </div>
+                          </div>
+                        </div>
                         <div className="flex items-center justify-between">
-                          <div className="w-6 h-6 bg-white/20 backdrop-blur-sm rounded-lg flex items-center justify-center">
-                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                            </svg>
+                          <div className="flex items-center space-x-1">
+                            <div className="w-5 h-5 bg-white/20 backdrop-blur-sm rounded-lg flex items-center justify-center">
+                              <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                              </svg>
+                            </div>
+                            <span className="text-xs text-blue-200/80">
+                              {new Date(board.createdAt).toLocaleDateString("vi-VN")}
+                            </span>
                           </div>
-                        </div>
-                        <h3 className="text-lg font-bold text-white group-hover:text-blue-100 transition-colors mb-1">
-                          {board.broadName}
-                        </h3>
-                        <p className="text-blue-100/80 text-xs leading-relaxed line-clamp-2">
-                          {board.description}
-                        </p>
-                      </div>
-                      <div className="bg-white/10 backdrop-blur-sm rounded-xl p-2 border border-white/20">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs font-semibold text-white">Progress</span>
-                          <span className="text-xs text-blue-200 bg-white/20 px-1 py-0.5 rounded-lg font-medium">0 Lists</span>
-                        </div>
-                        <div className="space-y-1">
-                          <div className="h-1.5 bg-white/20 rounded-full overflow-hidden">
-                            <div className="h-full bg-gradient-to-r from-blue-400 to-indigo-400 rounded-full w-0 group-hover:w-1/3 transition-all duration-700"></div>
+                          <div className="p-1 bg-white/20 backdrop-blur-sm rounded-lg group-hover:bg-white/30 transition-all duration-200 hover:scale-110">
+                            <ArrowUpRight className="w-4 h-4 text-white" />
                           </div>
-                          <div className="h-1 bg-white/20 rounded-full overflow-hidden">
-                            <div className="h-full bg-gradient-to-r from-indigo-400 to-purple-400 rounded-full w-0 group-hover:w-2/3 transition-all duration-700 delay-200"></div>
-                          </div>
-                          <div className="h-1 bg-white/20 rounded-full overflow-hidden">
-                            <div className="h-full bg-gradient-to-r from-purple-400 to-pink-400 rounded-full w-0 group-hover:w-1/4 transition-all duration-700 delay-400"></div>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-1">
-                          <div className="w-5 h-5 bg-white/20 backdrop-blur-sm rounded-lg flex items-center justify-center">
-                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
-                          </div>
-                          <span className="text-xs text-blue-200/80">
-                            {new Date(board.createdAt).toLocaleDateString("vi-VN")}
-                          </span>
-                        </div>
-                        <div className="p-1 bg-white/20 backdrop-blur-sm rounded-lg group-hover:bg-white/30 transition-all duration-200 hover:scale-110">
-                          <ArrowUpRight className="w-4 h-4 text-white" />
                         </div>
                       </div>
                     </div>
+                    {/* Nút thao tác (Chỉ hiển thị cho Owner) */}
+                    {isCurrentUserOwner && (
+                      <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300 z-20">
+                        <button
+                          onClick={(e) => handleEditBoard(board, e)}
+                          className="p-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-xl transition-all duration-200 hover:scale-110 shadow-lg"
+                        >
+                          <Edit className="w-4 h-4 text-white" />
+                        </button>
+                        <button
+                          onClick={(e) => handleDeleteBoard(board, e)}
+                          className="p-2 bg-red-500/20 hover:bg-red-500/30 backdrop-blur-sm rounded-xl transition-all duration-200 hover:scale-110 shadow-lg"
+                        >
+                          <Trash2 className="w-4 h-4 text-white" />
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300 z-20">
-                    <button
-                      onClick={(e) => handleEditBoard(board, e)}
-                      className="p-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-xl transition-all duration-200 hover:scale-110 shadow-lg"
-                    >
-                      <Edit className="w-4 h-4 text-white" />
-                    </button>
-                    <button
-                      onClick={(e) => handleDeleteBoard(board._id, e)}
-                      className="p-2 bg-red-500/20 hover:bg-red-500/30 backdrop-blur-sm rounded-xl transition-all duration-200 hover:scale-110 shadow-lg"
-                    >
-                      <Trash2 className="w-4 h-4 text-white" />
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
 
               {/* Add New Board Card */}
               <div

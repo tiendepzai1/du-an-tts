@@ -39,3 +39,28 @@ export type ListFormInputs = {
 export type CommentFormInputs = {
   content: string;
 };
+
+export type User = {
+  _id: string;
+  name: string;
+  email: string;
+  username?: string;
+};
+
+export type Invitation = {
+  _id: string;
+  boardId: {
+    _id: string;
+    broadName: string;
+    description: string;
+  };
+  inviterId: {
+    _id: string;
+    name?: string;
+    username?: string;
+    email: string;
+  };
+  message: string;
+  createdAt: string;
+  status: 'pending' | 'accepted' | 'rejected';
+};

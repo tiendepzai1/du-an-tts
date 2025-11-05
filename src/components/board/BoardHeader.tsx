@@ -1,6 +1,11 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { UserPlus } from "lucide-react";
 // Sử dụng import type cho kiểu Board
 import type { Board } from "./types";
+import InviteModal from "./InviteModal";
+import InvitationsDropdown from "./InvitationsDropdown";
+import Toast from "./Toast";
 
 interface BoardHeaderProps {
   board: Board;
@@ -9,9 +14,19 @@ interface BoardHeaderProps {
 
 export const BoardHeader = ({ board, currentUser }: BoardHeaderProps) => {
   const nav = useNavigate();
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error') => {
+    setToast({ message, type });
+  };
+
+  const closeToast = () => {
+    setToast(null);
+  };
 
   return (
-    <header className="relative bg-white/5 backdrop-blur-xl border-b border-white/10 shadow-2xl">
+    <header className="relative bg-white/5 backdrop-blur-xl border-b border-white/10 shadow-2xl z-40">
       <div className="w-full px-4 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
@@ -43,12 +58,49 @@ export const BoardHeader = ({ board, currentUser }: BoardHeaderProps) => {
             <div className="bg-white/10 backdrop-blur-sm rounded-xl px-3 py-1 border border-white/20">
               <span className="text-white/80 text-xs font-medium">{board.ownerList.length} Lists</span>
             </div>
+
+            {/* Invite User Button */}
+            <button
+              onClick={() => setShowInviteModal(true)}
+              className="flex items-center space-x-2 bg-white/10 backdrop-blur-sm hover:bg-white/20 text-white font-medium py-2 px-3 rounded-xl transition-all duration-300 hover:scale-105 shadow-lg border border-white/20"
+              title="Invite user to board"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span className="text-sm">Invite</span>
+            </button>
+
+            {/* Invitations Dropdown */}
+            <InvitationsDropdown
+              onSuccess={(message) => showToast(message, 'success')}
+              onError={(message) => showToast(message, 'error')}
+            />
+
             <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-indigo-500 rounded-xl flex items-center justify-center shadow-lg hover:scale-105 transition-transform cursor-pointer">
               <span className="text-white font-bold text-sm">{currentUser?.name?.charAt(0) || "U"}</span>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Invite Modal */}
+      {showInviteModal && (
+        <InviteModal
+          boardId={board._id}
+          boardName={board.broadName}
+          onClose={() => setShowInviteModal(false)}
+          onSuccess={(message) => showToast(message, 'success')}
+          onError={(message) => showToast(message, 'error')}
+        />
+      )}
+
+      {/* Toast Notifications */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={closeToast}
+        />
+      )}
     </header>
   );
 };

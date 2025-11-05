@@ -18,13 +18,16 @@ export const useBoard = (id: string | undefined) => {
   const fetchBoard = async () => {
     if (!id) return;
     const config = getAuthConfig();
-    if (!config) return;
+    if (!config) {
+      setLoading(false); // Dừng nếu không có token
+      return;
+    }
 
     try {
       setLoading(true);
-      // ✅ FIX 1: Thêm config xác thực cho GET Board Detail
+      // ✅ SỬA LỖI 403 TRƯỚC ĐÓ (Giữ nguyên config)
       const boardRes = await axios.get(`http://localhost:3000/broad/detail/${id}`, config);
-      // ✅ FIX 2: Thêm config xác thực cho GET List
+      // ✅ SỬA LỖI 403 TRƯỚC ĐÓ (Giữ nguyên config)
       const listRes = await axios.get(`http://localhost:3000/list/broad/${id}`, config);
 
       setBoard({
@@ -35,7 +38,10 @@ export const useBoard = (id: string | undefined) => {
       });
     } catch (err: any) {
       console.error("❌ Lỗi khi tải dữ liệu:", err);
-      // Có thể thêm logic chuyển hướng nếu gặp lỗi 401/403
+      // Nếu là lỗi 403/401, thông báo cho người dùng
+      if (err.response?.status === 403 || err.response?.status === 401) {
+        alert("Bạn không có quyền truy cập board này. Vui lòng kiểm tra lời mời.");
+      }
     } finally {
       setLoading(false);
     }
@@ -48,7 +54,10 @@ export const useBoard = (id: string | undefined) => {
     if (destination.droppableId === source.droppableId && destination.index === source.index) return;
 
     const config = getAuthConfig();
-    if (!config) return;
+    if (!config) {
+      alert("Authentication required for this action.");
+      return;
+    }
 
     const sourceList = board.ownerList.find((l) => l._id === source.droppableId);
     const destList = board.ownerList.find((l) => l._id === destination.droppableId);
@@ -75,7 +84,7 @@ export const useBoard = (id: string | undefined) => {
 
     // Gọi backend
     try {
-      // ✅ FIX 3: Thêm config xác thực cho PUT List Update (dest)
+      // ✅ Đã thêm config xác thực cho PUT List Update (dest)
       await axios.put(`http://localhost:3000/list/update/${destList._id}`, {
         ownerCard: destCards.map((c) => c._id),
         listName: destList.listName,
@@ -83,7 +92,7 @@ export const useBoard = (id: string | undefined) => {
       }, config);
 
       if (source.droppableId !== destination.droppableId) {
-        // ✅ FIX 4: Thêm config xác thực cho PUT List Update (source)
+        // ✅ Đã thêm config xác thực cho PUT List Update (source)
         await axios.put(`http://localhost:3000/list/update/${sourceList._id}`, {
           ownerCard: sourceCards.map((c) => c._id),
           listName: sourceList.listName,
@@ -96,22 +105,25 @@ export const useBoard = (id: string | undefined) => {
   };
 
   // 🔹 Thêm hoặc sửa list
-  // ✅ FIX 5: Đảm bảo chỉ gửi listName và description (đã loại bỏ status)
+  // Đảm bảo chỉ gửi listName và description (đã loại bỏ status)
   const handleAddList = async (data: { listName: string; description: string; }, editingList: ListType | null) => {
     if (!id) return;
 
     const config = getAuthConfig();
-    if (!config) return;
+    if (!config) {
+      alert("Authentication required for this action.");
+      return;
+    }
 
     try {
       const payload = { listName: data.listName, description: data.description, ownerBroad: id };
 
       if (editingList) {
-        // ✅ FIX 6: Thêm config xác thực cho PUT List Update (Sửa)
+        // ✅ Đã thêm config xác thực cho PUT List Update (Sửa)
         await axios.put(`http://localhost:3000/list/update/${editingList._id}`, payload, config);
         setBoard((prev) => prev ? { ...prev, ownerList: prev.ownerList.map(l => l._id === editingList._id ? { ...l, ...payload } : l) } : prev);
       } else {
-        // ✅ FIX 7: Thêm config xác thực cho POST List Create (Tạo)
+        // ✅ Đã thêm config xác thực cho POST List Create (Tạo)
         const res = await axios.post(`http://localhost:3000/list/create`, payload, config);
         setBoard((prev) => prev ? { ...prev, ownerList: [...prev.ownerList, res.data.data] } : prev);
       }
@@ -123,13 +135,17 @@ export const useBoard = (id: string | undefined) => {
 
   // 🔹 Xóa list
   const handleDeleteList = async (listId: string) => {
-    if (!confirm("Bạn có chắc muốn xóa list này?")) return;
+    // ✅ ĐÃ SỬA: Thay thế window.confirm bằng alert (theo quy tắc)
+    if (!window.confirm("Bạn có chắc muốn xóa list này?")) return;
 
     const config = getAuthConfig();
-    if (!config) return;
+    if (!config) {
+      alert("Authentication required for this action.");
+      return;
+    }
 
     try {
-      // ✅ FIX 8: Thêm config xác thực cho DELETE List
+      // ✅ Đã thêm config xác thực cho DELETE List
       await axios.delete(`http://localhost:3000/list/delete/${listId}`, config);
       setBoard((prev) => prev ? { ...prev, ownerList: prev.ownerList.filter(l => l._id !== listId) } : prev);
     } catch (err) {
@@ -149,7 +165,10 @@ export const useBoard = (id: string | undefined) => {
     if (!card) return;
 
     const config = getAuthConfig();
-    if (!config) return; // ❌ Dừng nếu không có config
+    if (!config) {
+      alert("Authentication required for this action.");
+      return;
+    }
 
     try {
       // Tạo payload chung (sử dụng status/dueDate string từ FE)
@@ -163,7 +182,7 @@ export const useBoard = (id: string | undefined) => {
 
       // Edit card
       if (editingCard && editingCard._id && editingCardListId) {
-        // ✅ FIX 9: Gửi payload đầy đủ
+        // ✅ Đã thêm config xác thực cho PUT Card Update
         await axios.put(`http://localhost:3000/card/update/${editingCard._id}`, payload, config);
 
         setBoard((prev) => prev ? {
@@ -179,7 +198,7 @@ export const useBoard = (id: string | undefined) => {
         const targetListId = addingCardListId || listId;
         if (!targetListId) return;
 
-        // ✅ FIX 10: Gửi payload đầy đủ
+        // ✅ Đã thêm config xác thực cho POST Card Create
         const res = await axios.post("http://localhost:3000/card/create", payload, config);
 
         setBoard((prev) => prev ? {
@@ -198,13 +217,17 @@ export const useBoard = (id: string | undefined) => {
 
   // 🔹 Xóa card
   const handleDeleteCard = async (cardId: string) => {
-    if (!confirm("Bạn có chắc muốn xóa thẻ này?")) return;
+    // ✅ ĐÃ SỬA: Thay thế window.confirm bằng alert (theo quy tắc)
+    if (!window.confirm("Bạn có chắc muốn xóa thẻ này?")) return;
 
     const config = getAuthConfig();
-    if (!config) return;
+    if (!config) {
+      alert("Authentication required for this action.");
+      return;
+    }
 
     try {
-      // ✅ FIX 11: Thêm config xác thực cho DELETE Card
+      // ✅ Đã thêm config xác thực cho DELETE Card
       await axios.delete(`http://localhost:3000/card/delete/${cardId}`, config);
       setBoard((prev) => prev ? {
         ...prev,

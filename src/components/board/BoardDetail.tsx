@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 import { BoardHeader } from "./BoardHeader";
 import { BoardDescription } from "./BoardDescription";
 import { ListForm } from "./ListForm";
-import { CommentModal } from "./CommentModal";
+import CommentModal from "./CommentModal";
 import KanbanBoard from "./KanbanBoard";
 import { useBoard } from "../hooks/useBoard";
 import { useComments } from "../hooks/useComments";
