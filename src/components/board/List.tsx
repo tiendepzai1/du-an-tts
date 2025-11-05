@@ -133,6 +133,35 @@ export default function List({
                   </span>
                 ))}
               </div>
+
+              {/* Hiển thị người thực hiện */}
+              {card.memberUser && card.memberUser.length > 0 && (
+                <div className="flex items-center gap-1 mt-2">
+                  <div className="flex -space-x-1">
+                    {card.memberUser.slice(0, 3).map(member => (
+                      <div
+                        key={member._id}
+                        className="w-6 h-6 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center border-2 border-white shadow-sm"
+                        title={member?.name || member?.email || ''}
+                      >
+                        <span className="text-white text-xs font-bold">
+                          {member?.name?.charAt(0)?.toUpperCase() || 'U'}
+                        </span>
+                      </div>
+                    ))}
+                    {card.memberUser.length > 3 && (
+                      <div className="w-6 h-6 bg-gray-500 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
+                        <span className="text-white text-xs font-bold">
+                          +{card.memberUser.length - 3}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <span className="text-xs text-gray-300 ml-1">
+                    {card.memberUser.length} người
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Nút Sửa và Xóa - Vị trí tuyệt đối, chỉ hiện khi hover */}

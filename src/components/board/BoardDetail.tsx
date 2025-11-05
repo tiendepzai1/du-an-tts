@@ -4,11 +4,12 @@ import { BoardHeader } from "./BoardHeader";
 import { BoardDescription } from "./BoardDescription";
 import { ListForm } from "./ListForm";
 import CommentModal from "./CommentModal";
+import CardDetailModal from "./CardDetailModal";
 import KanbanBoard from "./KanbanBoard";
 import { useBoard } from "../hooks/useBoard";
 import { useComments } from "../hooks/useComments";
 import { useCurrentUser } from "../hooks/useCurrentUser";
-import type { ListType, Card, ListFormInputs } from "./types"; // Added ListFormInputs
+import type { ListType, Card, ListFormInputs, User } from "./types"; // Added ListFormInputs
 
 export default function BoardDetail() {
   const { id } = useParams<{ id: string }>();
@@ -42,7 +43,9 @@ export default function BoardDetail() {
   const [editingCardListId, setEditingCardListId] = useState<string | null>(null);
   const [selectedCard, setSelectedCard] = useState<Card | null>(null);
   const [showCommentModal, setShowCommentModal] = useState(false);
+  const [showCardDetailModal, setShowCardDetailModal] = useState(false);
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [boardMembers, setBoardMembers] = useState<User[]>([]);
 
   // Debug: Giữ nguyên
   useEffect(() => {
@@ -51,8 +54,66 @@ export default function BoardDetail() {
 
   const handleCardClick = (card: Card) => {
     setSelectedCard(card);
-    setShowCommentModal(true);
-    fetchComments(card._id);
+    setShowCardDetailModal(true);
+  };
+
+  // Load board members từ backend
+  useEffect(() => {
+    const loadBoardMembers = async () => {
+      if (board && currentUser) {
+        try {
+          const token = localStorage.getItem('token');
+          const response = await fetch(`http://localhost:3000/user/board/${board._id}/members`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            setBoardMembers(data.data || []);
+          } else {
+            // Fallback: chỉ có owner
+            const members: User[] = [
+              {
+                _id: currentUser._id,
+                name: currentUser.name,
+                email: currentUser.email
+              }
+            ];
+            setBoardMembers(members);
+          }
+        } catch (error) {
+          console.error('Error loading board members:', error);
+          // Fallback: chỉ có owner
+          const members: User[] = [
+            {
+              _id: currentUser._id,
+              name: currentUser.name,
+              email: currentUser.email
+            }
+          ];
+          setBoardMembers(members);
+        }
+      }
+    };
+
+    loadBoardMembers();
+  }, [board, currentUser]);
+
+  const handleUpdateCard = (updatedCard: Card) => {
+    // Cập nhật card trong board state
+    if (board) {
+      const updatedBoard = {
+        ...board,
+        ownerList: board.ownerList.map(list => ({
+          ...list,
+          ownerCard: list.ownerCard?.map(card =>
+            card._id === updatedCard._id ? updatedCard : card
+          )
+        }))
+      };
+      // Cập nhật board state (cần implement trong useBoard hook)
+      setSelectedCard(updatedCard);
+    }
   };
 
   const handleEditList = (list: ListType) => {
@@ -152,6 +213,19 @@ export default function BoardDetail() {
             onDeleteComment={deleteComment}
             editingCommentId={editingCommentId}
             setEditingCommentId={setEditingCommentId}
+          />
+        )}
+
+        {showCardDetailModal && selectedCard && (
+          <CardDetailModal
+            card={selectedCard}
+            onClose={() => {
+              setShowCardDetailModal(false);
+              setSelectedCard(null);
+            }}
+            onUpdateCard={handleUpdateCard}
+            currentUser={currentUser}
+            boardMembers={boardMembers}
           />
         )}
         {/* Kanban Board */}

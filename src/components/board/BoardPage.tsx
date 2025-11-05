@@ -1,10 +1,11 @@
-import { Plus, ArrowUpRight, Edit, Trash2, Lock, Users } from "lucide-react";
+import { Plus, ArrowUpRight, Edit, Trash2, Users } from "lucide-react";
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useForm } from "react-hook-form";
 // ✅ IMPORT COMPONENT ĐÃ ĐƯỢC GIẢI QUYẾT LỖI
 import InvitationsDropdown from "./InvitationsDropdown.tsx";
+import InvitationsSection from "./InvitationsSection.tsx";
 
 
 // Helper type cho Current User (Dựa trên dữ liệu lưu trong localStorage)
@@ -305,6 +306,15 @@ export default function BoardPage() {
       {/* Main Content */}
       <main className="relative p-4">
         <div className="w-full">
+          {/* Invitations Section - Hiển thị trước danh sách dự án */}
+          {!isLoading && (
+            <InvitationsSection
+              onSuccess={handleGlobalSuccess}
+              onError={handleGlobalError}
+              onInvitationHandled={fetchBoards} // Refresh danh sách board khi chấp nhận lời mời
+            />
+          )}
+
           {isLoading ? (
             <div className="flex justify-center items-center py-20">
               <div className="flex flex-col items-center space-y-4">
@@ -317,146 +327,158 @@ export default function BoardPage() {
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
-              {boards.map((board, index) => {
-                // Kiểm tra quyền hạn
-                const isCurrentUserOwner = isOwner(board);
-                const isCurrentUserMember = !isCurrentUserOwner && board.members.some(memberId => memberId === currentUser?._id);
+            <div>
+              {/* Tiêu đề danh sách dự án */}
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center">
+                  <Users className="w-4 h-4 text-white" />
+                </div>
+                <h2 className="text-xl font-bold text-white">
+                  Dự án của bạn ({boards.length})
+                </h2>
+              </div>
 
-                return (
-                  <div
-                    key={board._id}
-                    className="group relative bg-white/10 backdrop-blur-xl rounded-2xl p-4 transition-all duration-300 hover:shadow-2xl hover:scale-105 border border-white/20 hover:border-white/40 overflow-hidden hover:bg-white/15"
-                    style={{ animationDelay: `${index * 100}ms` }}
-                  >
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
+                {boards.map((board, index) => {
+                  // Kiểm tra quyền hạn
+                  const isCurrentUserOwner = isOwner(board);
+                  const isCurrentUserMember = !isCurrentUserOwner && board.members.some(memberId => memberId === currentUser?._id);
+
+                  return (
                     <div
-                      className="absolute inset-0 cursor-pointer"
-                      onClick={() => handleBoardClick(board._id)}
+                      key={board._id}
+                      className="group relative bg-white/10 backdrop-blur-xl rounded-2xl p-4 transition-all duration-300 hover:shadow-2xl hover:scale-105 border border-white/20 hover:border-white/40 overflow-hidden hover:bg-white/15"
+                      style={{ animationDelay: `${index * 100}ms` }}
                     >
-                      <div className="absolute inset-0 bg-gradient-to-br from-blue-600/80 via-indigo-600/80 to-purple-700/80 group-hover:from-blue-500 group-hover:via-indigo-500 group-hover:to-purple-600 transition-all duration-300"></div>
-                      <div className="absolute top-4 left-4 w-2 h-2 bg-white/30 rounded-full animate-ping"></div>
-                      <div className="absolute bottom-6 right-6 w-1 h-1 bg-white/40 rounded-full animate-pulse"></div>
-                      <div className="relative z-10 space-y-3 p-4">
-                        <div className="space-y-2">
+                      <div
+                        className="absolute inset-0 cursor-pointer"
+                        onClick={() => handleBoardClick(board._id)}
+                      >
+                        <div className="absolute inset-0 bg-gradient-to-br from-blue-600/80 via-indigo-600/80 to-purple-700/80 group-hover:from-blue-500 group-hover:via-indigo-500 group-hover:to-purple-600 transition-all duration-300"></div>
+                        <div className="absolute top-4 left-4 w-2 h-2 bg-white/30 rounded-full animate-ping"></div>
+                        <div className="absolute bottom-6 right-6 w-1 h-1 bg-white/40 rounded-full animate-pulse"></div>
+                        <div className="relative z-10 space-y-3 p-4">
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <div className="w-6 h-6 bg-white/20 backdrop-blur-sm rounded-lg flex items-center justify-center">
+                                {/* HIỂN THỊ ICON DỰA TRÊN QUYỀN HẠN */}
+                                {isCurrentUserOwner ? (
+                                  <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                                  </svg>
+                                ) : (
+                                  <Users className="w-3 h-3 text-white" /> // Icon cho Member
+                                )}
+                              </div>
+                              {/* Hiển thị số lượng thành viên (Owner + Members) */}
+                              <span className="text-white/80 text-xs font-medium">
+                                {1 + board.members.length} Users
+                              </span>
+                            </div>
+                            <h3 className="text-lg font-bold text-white group-hover:text-blue-100 transition-colors mb-1">
+                              {board.broadName}
+                            </h3>
+                            <p className="text-blue-100/80 text-xs leading-relaxed line-clamp-2">
+                              {board.description}
+                            </p>
+                          </div>
+                          <div className="bg-white/10 backdrop-blur-sm rounded-xl p-2 border border-white/20">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-xs font-semibold text-white">Progress</span>
+                              <span className="text-xs text-blue-200 bg-white/20 px-1 py-0.5 rounded-lg font-medium">0 Lists</span>
+                            </div>
+                            <div className="space-y-1">
+                              <div className="h-1.5 bg-white/20 rounded-full overflow-hidden">
+                                <div className="h-full bg-gradient-to-r from-blue-400 to-indigo-400 rounded-full w-0 group-hover:w-1/3 transition-all duration-700"></div>
+                              </div>
+                              <div className="h-1 bg-white/20 rounded-full overflow-hidden">
+                                <div className="h-full bg-gradient-to-r from-indigo-400 to-purple-400 rounded-full w-0 group-hover:w-2/3 transition-all duration-700 delay-200"></div>
+                              </div>
+                              <div className="h-1 bg-white/20 rounded-full overflow-hidden">
+                                <div className="h-full bg-gradient-to-r from-purple-400 to-pink-400 rounded-full w-0 group-hover:w-1/4 transition-all duration-700 delay-400"></div>
+                              </div>
+                            </div>
+                          </div>
                           <div className="flex items-center justify-between">
-                            <div className="w-6 h-6 bg-white/20 backdrop-blur-sm rounded-lg flex items-center justify-center">
-                              {/* HIỂN THỊ ICON DỰA TRÊN QUYỀN HẠN */}
-                              {isCurrentUserOwner ? (
+                            <div className="flex items-center space-x-1">
+                              <div className="w-5 h-5 bg-white/20 backdrop-blur-sm rounded-lg flex items-center justify-center">
                                 <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                 </svg>
-                              ) : (
-                                <Users className="w-3 h-3 text-white" /> // Icon cho Member
-                              )}
+                              </div>
+                              <span className="text-xs text-blue-200/80">
+                                {new Date(board.createdAt).toLocaleDateString("vi-VN")}
+                              </span>
                             </div>
-                            {/* Hiển thị số lượng thành viên (Owner + Members) */}
-                            <span className="text-white/80 text-xs font-medium">
-                              {1 + board.members.length} Users
-                            </span>
-                          </div>
-                          <h3 className="text-lg font-bold text-white group-hover:text-blue-100 transition-colors mb-1">
-                            {board.broadName}
-                          </h3>
-                          <p className="text-blue-100/80 text-xs leading-relaxed line-clamp-2">
-                            {board.description}
-                          </p>
-                        </div>
-                        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-2 border border-white/20">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs font-semibold text-white">Progress</span>
-                            <span className="text-xs text-blue-200 bg-white/20 px-1 py-0.5 rounded-lg font-medium">0 Lists</span>
-                          </div>
-                          <div className="space-y-1">
-                            <div className="h-1.5 bg-white/20 rounded-full overflow-hidden">
-                              <div className="h-full bg-gradient-to-r from-blue-400 to-indigo-400 rounded-full w-0 group-hover:w-1/3 transition-all duration-700"></div>
+                            <div className="p-1 bg-white/20 backdrop-blur-sm rounded-lg group-hover:bg-white/30 transition-all duration-200 hover:scale-110">
+                              <ArrowUpRight className="w-4 h-4 text-white" />
                             </div>
-                            <div className="h-1 bg-white/20 rounded-full overflow-hidden">
-                              <div className="h-full bg-gradient-to-r from-indigo-400 to-purple-400 rounded-full w-0 group-hover:w-2/3 transition-all duration-700 delay-200"></div>
-                            </div>
-                            <div className="h-1 bg-white/20 rounded-full overflow-hidden">
-                              <div className="h-full bg-gradient-to-r from-purple-400 to-pink-400 rounded-full w-0 group-hover:w-1/4 transition-all duration-700 delay-400"></div>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-1">
-                            <div className="w-5 h-5 bg-white/20 backdrop-blur-sm rounded-lg flex items-center justify-center">
-                              <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                              </svg>
-                            </div>
-                            <span className="text-xs text-blue-200/80">
-                              {new Date(board.createdAt).toLocaleDateString("vi-VN")}
-                            </span>
-                          </div>
-                          <div className="p-1 bg-white/20 backdrop-blur-sm rounded-lg group-hover:bg-white/30 transition-all duration-200 hover:scale-110">
-                            <ArrowUpRight className="w-4 h-4 text-white" />
                           </div>
                         </div>
                       </div>
+                      {/* Nút thao tác (Chỉ hiển thị cho Owner) */}
+                      {isCurrentUserOwner && (
+                        <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300 z-20">
+                          <button
+                            onClick={(e) => handleEditBoard(board, e)}
+                            className="p-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-xl transition-all duration-200 hover:scale-110 shadow-lg"
+                          >
+                            <Edit className="w-4 h-4 text-white" />
+                          </button>
+                          <button
+                            onClick={(e) => handleDeleteBoard(board, e)}
+                            className="p-2 bg-red-500/20 hover:bg-red-500/30 backdrop-blur-sm rounded-xl transition-all duration-200 hover:scale-110 shadow-lg"
+                          >
+                            <Trash2 className="w-4 h-4 text-white" />
+                          </button>
+                        </div>
+                      )}
                     </div>
-                    {/* Nút thao tác (Chỉ hiển thị cho Owner) */}
-                    {isCurrentUserOwner && (
-                      <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300 z-20">
-                        <button
-                          onClick={(e) => handleEditBoard(board, e)}
-                          className="p-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-xl transition-all duration-200 hover:scale-110 shadow-lg"
-                        >
-                          <Edit className="w-4 h-4 text-white" />
-                        </button>
-                        <button
-                          onClick={(e) => handleDeleteBoard(board, e)}
-                          className="p-2 bg-red-500/20 hover:bg-red-500/30 backdrop-blur-sm rounded-xl transition-all duration-200 hover:scale-110 shadow-lg"
-                        >
-                          <Trash2 className="w-4 h-4 text-white" />
-                        </button>
-                      </div>
-                    )}
+                  );
+                })}
+
+                {/* Add New Board Card */}
+                <div
+                  onClick={() => setIsCreateModalOpen(true)}
+                  className="group border-2 border-dashed border-white/30 rounded-2xl p-4 cursor-pointer hover:border-white/50 hover:bg-white/10 transition-all duration-300 flex flex-col items-center justify-center min-h-[200px] bg-white/5 backdrop-blur-xl hover:shadow-2xl hover:scale-105"
+                >
+                  <div className="w-12 h-12 bg-gradient-to-br from-white/20 to-white/10 group-hover:from-blue-500/30 group-hover:to-indigo-500/30 rounded-2xl flex items-center justify-center mb-4 transition-all duration-300 group-hover:scale-110 shadow-lg">
+                    <Plus className="w-6 h-6 text-white/60 group-hover:text-white transition-colors" />
                   </div>
-                );
-              })}
-
-              {/* Add New Board Card */}
-              <div
-                onClick={() => setIsCreateModalOpen(true)}
-                className="group border-2 border-dashed border-white/30 rounded-2xl p-4 cursor-pointer hover:border-white/50 hover:bg-white/10 transition-all duration-300 flex flex-col items-center justify-center min-h-[200px] bg-white/5 backdrop-blur-xl hover:shadow-2xl hover:scale-105"
-              >
-                <div className="w-12 h-12 bg-gradient-to-br from-white/20 to-white/10 group-hover:from-blue-500/30 group-hover:to-indigo-500/30 rounded-2xl flex items-center justify-center mb-4 transition-all duration-300 group-hover:scale-110 shadow-lg">
-                  <Plus className="w-6 h-6 text-white/60 group-hover:text-white transition-colors" />
-                </div>
-                <h3 className="text-lg font-bold text-white/80 group-hover:text-white mb-2 transition-colors">
-                  Tạo dự án mới
-                </h3>
-                <p className="text-white/60 group-hover:text-white/80 text-center leading-relaxed transition-colors max-w-xs text-sm">
-                  Bắt đầu quản lý dự án chuyên nghiệp của bạn
-                </p>
-                <div className="mt-4 bg-white/20 backdrop-blur-sm rounded-xl px-3 py-1 border border-white/30">
-                  <span className="text-white/80 text-xs font-medium">+ New Project</span>
+                  <h3 className="text-lg font-bold text-white/80 group-hover:text-white mb-2 transition-colors">
+                    Tạo dự án mới
+                  </h3>
+                  <p className="text-white/60 group-hover:text-white/80 text-center leading-relaxed transition-colors max-w-xs text-sm">
+                    Bắt đầu quản lý dự án chuyên nghiệp của bạn
+                  </p>
+                  <div className="mt-4 bg-white/20 backdrop-blur-sm rounded-xl px-3 py-1 border border-white/30">
+                    <span className="text-white/80 text-xs font-medium">+ New Project</span>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
 
-          {!isLoading && boards.length === 0 && (
-            <div className="text-center py-12">
-              <div className="w-16 h-16 bg-gradient-to-br from-white/10 to-white/5 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg backdrop-blur-xl border border-white/20">
-                <svg className="w-8 h-8 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                </svg>
-              </div>
-              <h3 className="text-xl font-bold text-white mb-3">Chưa có dự án nào</h3>
-              <p className="text-white/70 mb-6 text-sm max-w-md mx-auto leading-relaxed">
-                Tạo dự án đầu tiên để bắt đầu quản lý công việc một cách chuyên nghiệp
-              </p>
-              <button
-                onClick={() => setIsCreateModalOpen(true)}
-                className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:via-indigo-500 hover:to-purple-500 px-6 py-3 rounded-xl text-white font-bold text-sm shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 backdrop-blur-xl border border-white/20"
-              >
-                <span className="flex items-center space-x-2">
-                  <Plus className="w-4 h-4" />
-                  <span>Tạo dự án đầu tiên</span>
-                </span>
-              </button>
+              {!isLoading && boards.length === 0 && (
+                <div className="text-center py-12">
+                  <div className="w-16 h-16 bg-gradient-to-br from-white/10 to-white/5 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg backdrop-blur-xl border border-white/20">
+                    <svg className="w-8 h-8 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                    </svg>
+                  </div>
+                  <h3 className="text-xl font-bold text-white mb-3">Chưa có dự án nào</h3>
+                  <p className="text-white/70 mb-6 text-sm max-w-md mx-auto leading-relaxed">
+                    Tạo dự án đầu tiên để bắt đầu quản lý công việc một cách chuyên nghiệp
+                  </p>
+                  <button
+                    onClick={() => setIsCreateModalOpen(true)}
+                    className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:via-indigo-500 hover:to-purple-500 px-6 py-3 rounded-xl text-white font-bold text-sm shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 backdrop-blur-xl border border-white/20"
+                  >
+                    <span className="flex items-center space-x-2">
+                      <Plus className="w-4 h-4" />
+                      <span>Tạo dự án đầu tiên</span>
+                    </span>
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
